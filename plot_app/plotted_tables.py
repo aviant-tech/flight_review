@@ -259,7 +259,24 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
             table_text_right.append(('Max Altitude Difference', "{:.0f} m".format(max_alt_diff)))
 
         table_text_right.append(('', '')) # spacing
+    except:
+        pass
 
+    try:
+        # TECS statistics
+        tecs_status = ulog.get_dataset('tecs_status')
+        altitude_filtered = tecs_status.data['altitude_filtered']
+        altitude_sp = tecs_status.data['altitude_sp']
+        if len(altitude_filtered) > 0 and len(altitude_sp) > 0:
+            altitude_error = altitude_filtered - altitude_sp
+            standard_altitude_error = np.std(altitude_error)
+            table_text_right.append(
+                ('Standard altitude error', "{:.1f} m".format(standard_altitude_error)))
+
+    except:
+        pass
+
+    try:
         # Speed
         if len(vel_x) > 0:
             max_h_speed = np.amax(np.sqrt(np.square(vel_x) + np.square(vel_y)))
@@ -286,6 +303,10 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
 
             table_text_right.append(('', '')) # spacing
 
+    except:
+        pass
+
+    try:
         vehicle_attitude = ulog.get_dataset('vehicle_attitude')
         roll = vehicle_attitude.data['roll']
         pitch = vehicle_attitude.data['pitch']
@@ -326,7 +347,7 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
 
                 table_text_right.append(('Max Current', "{:.1f} A".format(max_current)))
     except:
-        pass # ignore (e.g. if topic not found)
+        pass
 
 
     # generate the tables

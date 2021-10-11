@@ -177,6 +177,20 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
     if data_plot.finalize() is not None: plots.append(data_plot)
 
+    # QuadChute
+    data_plot = DataPlot(data, plot_config, 'tecs_status',
+                         title='QuadChute status',
+                         changed_params=changed_params, x_range=x_range)
+    data_plot.add_graph([lambda data: ('altitude_error', data['altitude_filtered'] - data['altitude_sp'])],
+                        colors8[0:1], ['Altitude error [m]'])
+    data_plot.add_graph(['height_rate'], colors8[2:3], ['Height rate [m/s]'])
+    data_plot.add_graph(['height_rate_setpoint'], colors8[3:4], ['Height rate setpoint [m/s]'])
+    data_plot.change_dataset('actuator_controls_1')
+    data_plot.add_graph([lambda data: ('thrust', data['control[3]']*10)],
+                        colors8[5:6], ['Thrust [0, 10]'])
+    plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
+
+    if data_plot.finalize() is not None: plots.append(data_plot)
 
 
     # Roll/Pitch/Yaw angle & angular rate
