@@ -682,19 +682,41 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
 
-    # power
+    # pusher power (instance 0)
     data_plot = DataPlot(data, plot_config, 'battery_status',
-                         y_start=0, title='Power',
+                         y_start=0, title='Pusher power',
                          plot_height='small', changed_params=changed_params,
-                         x_range=x_range)
-    data_plot.add_graph(['voltage_v', 'voltage_filtered_v',
-                         'current_a', lambda data: ('discharged_mah', data['discharged_mah']/100),
-                         lambda data: ('remaining', data['remaining']*10)],
-                        colors8[::2]+colors8[1:2],
-                        ['Battery Voltage [V]', 'Battery Voltage filtered [V]',
-                         'Battery Current [A]', 'Discharged Amount [mAh / 100]',
-                         'Battery remaining [0=empty, 10=full]'])
-    data_plot.change_dataset('system_power')
+                         x_range=x_range, topic_instance=0)
+    if data_plot.dataset:
+        data_plot.add_graph(['voltage_v', 'voltage_filtered_v',
+                             'current_a', lambda data: ('discharged_mah', data['discharged_mah']/100),
+                             lambda data: ('remaining', data['remaining']*10)],
+                            colors8[::2]+colors8[1:2],
+                            ['Voltage [V]', 'Voltage filtered [V]',
+                             'Current [A]', 'Discharged [mAh / 100]',
+                             'Remaining [0=empty, 10=full]'])
+        if data_plot.finalize() is not None: plots.append(data_plot)
+
+    # top power (instance 1)
+    data_plot = DataPlot(data, plot_config, 'battery_status',
+                         y_start=0, title='Top power',
+                         plot_height='small', changed_params=changed_params,
+                         x_range=x_range, topic_instance=1)
+    if data_plot.dataset:
+        data_plot.add_graph(['voltage_v', 'voltage_filtered_v',
+                             'current_a', lambda data: ('discharged_mah', data['discharged_mah']/100),
+                             lambda data: ('remaining', data['remaining']*10)],
+                            colors8[::2]+colors8[1:2],
+                            ['Voltage [V]', 'Voltage filtered [V]',
+                             'Current [A]', 'Discharged [mAh / 100]',
+                             'Remaining [0=empty, 10=full]'])
+        if data_plot.finalize() is not None: plots.append(data_plot)
+
+    # system power
+    data_plot = DataPlot(data, plot_config, 'system_power',
+                         y_start=0, title='System power',
+                         plot_height='small', changed_params=changed_params,
+                         x_range=x_range, topic_instance=0)
     if data_plot.dataset:
         if 'voltage5v_v' in data_plot.dataset.data and \
                         np.amax(data_plot.dataset.data['voltage5v_v']) > 0.0001:
@@ -702,7 +724,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         if 'sensors3v3[0]' in data_plot.dataset.data and \
                         np.amax(data_plot.dataset.data['sensors3v3[0]']) > 0.0001:
             data_plot.add_graph(['sensors3v3[0]'], colors8[5:6], ['3.3 V'])
-    if data_plot.finalize() is not None: plots.append(data_plot)
+        if data_plot.finalize() is not None: plots.append(data_plot)
 
 
     #Temperature
