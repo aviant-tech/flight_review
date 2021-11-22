@@ -271,7 +271,7 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
             altitude_error = altitude_filtered - altitude_sp
             standard_altitude_error = np.std(altitude_error)
             table_text_right.append(
-                ('Standard altitude error', "{:.1f} m".format(standard_altitude_error)))
+                ('Standard Altitude Error', "{:.1f} m".format(standard_altitude_error)))
 
     except:
         pass
