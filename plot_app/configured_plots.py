@@ -192,6 +192,21 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
     if data_plot.finalize() is not None: plots.append(data_plot)
 
+    # Data link
+    data_plot = DataPlot(data, plot_config, 'telemetry_status',
+                         title='Data link',  changed_params=changed_params,
+                         x_range=x_range)
+    for link_id in range(3):
+        data_plot.change_dataset('telemetry_status', topic_instance=link_id)
+        if data_plot.dataset:
+            data_plot.add_graph(['heartbeats[%d].timestamp' % i for i in range(4)],
+                    colors8[link_id:link_id+1]*4,
+                    ['Link %d heartbeats %d' % (link_id, i) for i in range(4)])
+
+    plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
+
+    if data_plot.finalize() is not None: plots.append(data_plot)
+
 
     # Roll/Pitch/Yaw angle & angular rate
     for index, axis in enumerate(['roll', 'pitch', 'yaw']):
