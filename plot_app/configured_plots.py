@@ -192,6 +192,21 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
     if data_plot.finalize() is not None: plots.append(data_plot)
 
+    # Icing
+    data_plot = DataPlot(data, plot_config, 'actuator_controls_1',
+                         y_start=0, title='Icing',
+                         plot_height='small', changed_params=changed_params,
+                         x_range=x_range)
+    data_plot.add_graph([lambda data: ('thrust', data['control[3]']*10)],
+                        colors8[0:1], ['Thrust control [0,10]'], mark_nan=True)
+
+    data_plot.change_dataset('vehicle_attitude')
+    data_plot.add_graph([lambda data: ('pitch_estimated', np.rad2deg(data['pitch']))],
+                        colors8[1:2], ['Pitch estimated [deg]'])
+    data_plot.change_dataset('tecs_status')
+    data_plot.add_graph(['airspeed_filtered'], colors8[2:3], ['Airspeed filtered'])
+    if data_plot.finalize() is not None: plots.append(data_plot)
+
     # Data link
     data_plot = DataPlot(data, plot_config, 'telemetry_status',
                          title='Data link',  changed_params=changed_params,
