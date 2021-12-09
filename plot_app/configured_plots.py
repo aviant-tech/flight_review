@@ -178,13 +178,27 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     if data_plot.finalize() is not None: plots.append(data_plot)
 
     # QuadChute
+
+    # PX4 uses a rolling average over the height rate and height rate setpoint
+    # to figure out if it should QuadChute
+    def quadchute_rolling_average(series):
+        AVERAGING_FACTOR = 1/50 # Hard coded value, should apparently give 1 second window
+        average_series = series.copy()
+        for i in range(1, len(series)):
+            average_series[i] = AVERAGING_FACTOR*series[i] + (1-AVERAGING_FACTOR)*average_series[i-1]
+        return average_series
+
     data_plot = DataPlot(data, plot_config, 'tecs_status',
-                         title='QuadChute status',
+                         title='QuadChute',
                          changed_params=changed_params, x_range=x_range)
     data_plot.add_graph([lambda data: ('altitude_error', data['altitude_filtered'] - data['altitude_sp'])],
                         colors8[0:1], ['Altitude error [m]'])
-    data_plot.add_graph(['height_rate'], colors8[2:3], ['Height rate [m/s]'])
+    data_plot.add_graph(['height_rate'], colors8[1:2], ['Height rate [m/s]'])
+    data_plot.add_graph([lambda data: ('height_rate_ra', quadchute_rolling_average(data['height_rate']))],
+                        colors8[2:3], ['Height rate, rolling average [m/s]'])
     data_plot.add_graph(['height_rate_setpoint'], colors8[3:4], ['Height rate setpoint [m/s]'])
+    data_plot.add_graph([lambda data: ('height_rate_setpoint_ra', quadchute_rolling_average(data['height_rate_setpoint']))],
+                        colors8[4:5], ['Height rate setpoint, rolling average [m/s]'])
     data_plot.change_dataset('actuator_controls_1')
     data_plot.add_graph([lambda data: ('thrust', data['control[3]']*10)],
                         colors8[5:6], ['Thrust [0, 10]'])
