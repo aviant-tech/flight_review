@@ -99,6 +99,54 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         vtol_states = None
 
 
+    # Horizontal acceptance
+    # Generates a list of tuples corresponding to changes in the
+    # horizontal acceptance status of the upcoming waypoint. The first
+    # item in the tuple is the change timestamp, and the second is a
+    # boolean giving the acceptance status
+    try:
+        cur_dataset = ulog.get_dataset('position_controller_status')
+        acceptance_radius = cur_dataset.data['acceptance_radius']
+        dist_to_wp = cur_dataset.data['wp_dist']
+        hor_acc = dist_to_wp <= acceptance_radius
+        hor_acc_change = np.where(hor_acc[1:] != hor_acc[:-1])[0]
+        hor_acc_idxs = np.append([0], hor_acc_change+1)
+        horizontal_acceptance = [(cur_dataset.data['timestamp'][i], hor_acc[i]) for i in hor_acc_idxs]
+        horizontal_acceptance.append((ulog.last_timestamp, False))
+    except (KeyError, IndexError) as error:
+        horizontal_acceptance = None
+
+    # Vertical acceptance
+    # Same as for horizontal acceptance, but using altitudes instead of
+    # horizontal distance. Since we have to compare the continuous
+    # altitude with the discrete next-waypoint altitude, the two lists are
+    # interjoined in a "last-value" interpolation.
+    try:
+        alt_acc_rad = ulog.initial_parameters['NAV_FW_ALT_RAD']
+        wp_dataset = ulog.get_dataset('navigator_mission_item')
+        wp_alts = wp_dataset.data['altitude']
+        wp_timestamps = wp_dataset.data['timestamp']
+
+        gpos_dataset = ulog.get_dataset('vehicle_global_position')
+        gpos_alts = gpos_dataset.data['alt']
+        gpos_timestamps = gpos_dataset.data['timestamp']
+        gpos_wp_alts = []
+
+        # "Last-value" interpolation due to differing time axes
+        cur_wp_idx = 0
+        for gpos_idx in range(len(gpos_timestamps)):
+            gpos_wp_alts.append(wp_alts[cur_wp_idx])
+            if (gpos_timestamps[gpos_idx] >= wp_timestamps[cur_wp_idx]
+                and cur_wp_idx < len(wp_timestamps)-1):
+                cur_wp_idx += 1
+
+        alt_acc = np.abs(gpos_alts-gpos_wp_alts) <= alt_acc_rad
+        alt_acc_change = np.where(alt_acc[1:] != alt_acc[:-1])[0]
+        alt_acc_idxs = np.append([0], alt_acc_change+1)
+        vertical_acceptance = [(gpos_timestamps[i], alt_acc[i]) for i in alt_acc_idxs]
+        vertical_acceptance.append((ulog.last_timestamp, False))
+    except (KeyError, IndexError) as error:
+        vertical_acceptance = None
 
     # Heading
     curdoc().template_variables['title_html'] = get_heading_html(
@@ -174,6 +222,28 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     data_plot.add_graph([lambda data: ('thrust', data['control[3]']*100)],
                         colors8[6:7], ['Thrust [0, 100]'])
     plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
+
+    if data_plot.finalize() is not None: plots.append(data_plot)
+
+    # Waypoint tracking
+    def below_or_none(limit, data):
+        ''' Used to hide large outliers from plots '''
+        data[data >= limit] = None
+        return data
+
+    data_plot = DataPlot(data, plot_config, 'position_controller_status',
+                         title='Waypoint tracking', y_axis_label='[m]',
+                         changed_params=changed_params, x_range=x_range)
+    data_plot.add_graph([lambda data: ('wp_dist', below_or_none(9e5, data['wp_dist']))],
+            colors8[0:1], ['Distance to next WP'])
+    data_plot.add_graph(['acceptance_radius'], colors8[1:2], ['Acceptance radius'])
+    data_plot.change_dataset('navigator_mission_item')
+    data_plot.add_circle(['altitude'], [plot_config['mission_setpoint_color']], ['Waypoint altitude'])
+    data_plot.change_dataset('tecs_status')
+    data_plot.add_graph(['altitude_sp'], colors8[3:4], ['Altitude setpoint'])
+    data_plot.change_dataset('vehicle_global_position')
+    data_plot.add_graph(['alt'], colors8[4:5], ['Fused altitude'])
+    plot_wp_acceptance_background(data_plot, horizontal_acceptance, vertical_acceptance)
 
     if data_plot.finalize() is not None: plots.append(data_plot)
 

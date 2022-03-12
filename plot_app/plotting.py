@@ -208,6 +208,41 @@ def plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states=Non
                         line_width=1, line_alpha=0.5)
         p.add_layout(split_line)
 
+def plot_wp_acceptance_background(data_plot, hor_acc, ver_acc):
+    '''
+    Plots in red and green whether the next waypoint is within vertical and
+    horizontal acceptance distances. This is useful because it helps with
+    debugging waypoint selection. The function expects hor_acc and ver_acc to
+    be lists of tuples (timestamp, accepted) where each timestamp "timestamp"
+    corresponds to a change in the acceptance status "accepted".
+    '''
+    bar_height = 20
+    p = data_plot.bokeh_plot
+    colors = ['red', 'green']
+    if hor_acc:
+        for i in range(len(hor_acc)-1):
+            t_start, accepted = hor_acc[i]
+            t_end, _ = hor_acc[i + 1]
+            color = colors[int(accepted)]
+            p.add_layout(BoxAnnotation(left=int(t_start), right=int(t_end),
+                                       fill_alpha=0.8, line_color=None,
+                                       fill_color=color,
+                                       top=bar_height, top_units='screen',
+                                       bottom=0, bottom_units='screen'))
+        p.add_layout(Label(x=0, y=3, x_units='screen', y_units='screen',
+                      text='Horizontal acceptance', text_font_size='10pt', level='glyph'))
+    if ver_acc:
+        for i in range(len(ver_acc)-1):
+            t_start, accepted = ver_acc[i]
+            t_end, _ = ver_acc[i + 1]
+            color = colors[int(accepted)]
+            p.add_layout(BoxAnnotation(left=int(t_start), right=int(t_end),
+                                       fill_alpha=0.8, line_color=None,
+                                       fill_color=color,
+                                       top=2*bar_height, top_units='screen',
+                                       bottom=bar_height, bottom_units='screen'))
+        p.add_layout(Label(x=0, y=3+bar_height, x_units='screen', y_units='screen',
+                      text='Vertical acceptance', text_font_size='10pt', level='glyph'))
 
 def plot_set_equal_aspect_ratio(p, x, y, zoom_out_factor=1.3, min_range=5):
     """

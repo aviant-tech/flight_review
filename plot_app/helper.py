@@ -308,7 +308,8 @@ def load_ulog_file(file_name):
                   'vehicle_magnetometer', 'system_power', 'tecs_status', 'telemetry_status',
                   'sensor_baro', 'sensor_accel', 'sensor_accel_fifo',
                   'sensor_gyro_fifo', 'vehicle_angular_acceleration',
-                  'ekf2_timestamps', 'manual_control_switches']
+                  'ekf2_timestamps', 'manual_control_switches',
+                  'position_controller_status', 'navigator_mission_item']
     try:
         ulog = ULog(file_name, msg_filter, disable_str_exceptions=False)
     except FileNotFoundError:
