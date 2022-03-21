@@ -736,9 +736,11 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
                          y_axis_label='[gauss]', title='Raw Magnetic Field Strength',
                          plot_height='small', changed_params=changed_params,
                          x_range=x_range)
-    data_plot.add_graph(['magnetometer_ga[0]', 'magnetometer_ga[1]',
-                         'magnetometer_ga[2]'], colors3,
-                        ['X', 'Y', 'Z'])
+    for mag_instance in range(2):
+        data_plot.change_dataset(magnetometer_ga_topic, topic_instance=mag_instance)
+        data_plot.add_graph(['magnetometer_ga[0]', 'magnetometer_ga[1]',
+            'magnetometer_ga[2]'], colors8[3*mag_instance:3*mag_instance+3],
+                            [f'X (mag_{mag_instance})', f'Y (mag_{mag_instance})', f'Z (mag_{mag_instance})'])
     if data_plot.finalize() is not None: plots.append(data_plot)
 
 
@@ -779,19 +781,24 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     # thrust and magnetic field
     data_plot = DataPlot(data, plot_config, magnetometer_ga_topic,
                          y_start=0, title='Thrust and Magnetic Field', plot_height='small',
-                         changed_params=changed_params, x_range=x_range)
-    data_plot.add_graph(
-        [lambda data: ('len_mag', np.sqrt(data['magnetometer_ga[0]']**2 +
-                                          data['magnetometer_ga[1]']**2 +
-                                          data['magnetometer_ga[2]']**2))],
-        colors3[0:1], ['Norm of Magnetic Field'])
+                         changed_params=changed_params, x_range=x_range, topic_instance=1)
+
     data_plot.change_dataset('actuator_controls_0')
     data_plot.add_graph([lambda data: ('thrust', data['control[3]'])],
-                        colors3[1:2], ['Thrust'])
+                        colors8[0:1], ['Thrust'])
     if is_vtol:
         data_plot.change_dataset('actuator_controls_1')
         data_plot.add_graph([lambda data: ('thrust', data['control[3]'])],
-                            colors3[2:3], ['Thrust (Fixed-wing)'])
+                            colors8[1:2], ['Thrust (Fixed-wing)'])
+
+    for mag_instance in range(2):
+        data_plot.change_dataset(magnetometer_ga_topic, topic_instance=mag_instance)
+        data_plot.add_graph(
+            [lambda data: ('len_mag', np.sqrt(data['magnetometer_ga[0]']**2 +
+                                            data['magnetometer_ga[1]']**2 +
+                                            data['magnetometer_ga[2]']**2))],
+            colors8[2+mag_instance:2+mag_instance+1], [f'Norm of Magnetic Field (mag_{mag_instance})'])
+
     if data_plot.finalize() is not None: plots.append(data_plot)
 
 
