@@ -778,7 +778,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     if data_plot.finalize() is not None: plots.append(data_plot)
 
 
-    # thrust and magnetic field
+    # thrust and magnetic field time series
     data_plot = DataPlot(data, plot_config, magnetometer_ga_topic,
                          y_start=0, title='Thrust and Magnetic Field', plot_height='small',
                          changed_params=changed_params, x_range=x_range, topic_instance=1)
@@ -798,6 +798,60 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
                                             data['magnetometer_ga[1]']**2 +
                                             data['magnetometer_ga[2]']**2))],
             colors8[2+mag_instance:2+mag_instance+1], [f'Norm of Magnetic Field (mag_{mag_instance})'])
+
+    if data_plot.finalize() is not None: plots.append(data_plot)
+
+    # thrust and magentic field scatter plot
+    min_thrust = 0.5
+    data_plot = DataPlot(data, plot_config, magnetometer_ga_topic,
+                         title=f'Thrust and magnetic norm scatter plot (polyfit for thrust > {min_thrust})', plot_height='small',
+                         x_axis_label='Thrust', y_axis_label='Magnetic field norm')
+    data_plot.set_use_time_formatter(False)
+
+    data_plot.change_dataset('actuator_controls_0')
+    thrust_timestamps = data_plot.dataset.data['timestamp']
+    thrust_values = data_plot.dataset.data['control[3]']
+
+    min_mag_norm = np.inf
+    max_mag_norm = 0
+    for topic_instance in range(2):
+        data_plot.change_dataset(magnetometer_ga_topic, topic_instance=topic_instance)
+        if data_plot.dataset is None or not 'magnetometer_ga[0]' in data_plot.dataset.data:
+            continue
+        mag_norm_values = np.sqrt(
+            data_plot.dataset.data['magnetometer_ga[0]']**2
+            + data_plot.dataset.data['magnetometer_ga[1]']**2
+            + data_plot.dataset.data['magnetometer_ga[2]']**2
+        )
+        mag_timestamps = data_plot.dataset.data['timestamp']
+        thrust_values_interp = np.interp(mag_timestamps, thrust_timestamps, thrust_values)
+
+        min_mag_norm = np.min([min_mag_norm, np.min(mag_norm_values)])
+        max_mag_norm = np.max([max_mag_norm, np.max(mag_norm_values)])
+
+        filter_idxs = thrust_values_interp > min_thrust
+        mag_norm_filtered = mag_norm_values[filter_idxs]
+        thrust_filtered = thrust_values_interp[filter_idxs]
+        cavg = np.average(mag_norm_filtered)
+        c1, c0 = np.polyfit(thrust_filtered, mag_norm_filtered, 1)
+        fit_func = np.poly1d((c1, c0))
+
+        p = data_plot.bokeh_plot
+        p.circle(thrust_values_interp, mag_norm_values,
+                color=colors8[topic_instance],
+                legend_label=f'Magnetometer {topic_instance}')
+
+        polyfit_xs = np.linspace(0, 1, 100)
+        p.line(polyfit_xs, fit_func(polyfit_xs),
+                color=colors8[topic_instance],
+                legend_label=f'Fit {topic_instance}: y={c0:.3f} (1 + {c1:.3f}x)')
+
+
+        p = data_plot.bokeh_plot
+
+    dy = max_mag_norm-min_mag_norm
+    p.x_range = Range1d(start=min_thrust, end=1)
+    p.y_range = Range1d(start=min_mag_norm-dy*0.1, end=max_mag_norm+dy*0.1)
 
     if data_plot.finalize() is not None: plots.append(data_plot)
 
