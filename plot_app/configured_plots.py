@@ -803,12 +803,10 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
     # thrust and magentic field scatter plot
     min_thrust = 0.5
-    data_plot = DataPlot(data, plot_config, magnetometer_ga_topic,
+    data_plot = DataPlot(data, plot_config, 'actuator_controls_0',
                          title=f'Thrust and magnetic norm scatter plot (polyfit for thrust > {min_thrust})', plot_height='small',
                          x_axis_label='Thrust', y_axis_label='Magnetic field norm')
     data_plot.set_use_time_formatter(False)
-
-    data_plot.change_dataset('actuator_controls_0')
     thrust_timestamps = data_plot.dataset.data['timestamp']
     thrust_values = data_plot.dataset.data['control[3]']
 
@@ -825,27 +823,29 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         mag_timestamps = data_plot.dataset.data['timestamp']
         thrust_values_interp = np.interp(mag_timestamps, thrust_timestamps, thrust_values)
 
-        filter_idxs = thrust_values_interp >= min_thrust
-        mag_norm_filtered = mag_norm_values[filter_idxs]
-        thrust_filtered = thrust_values_interp[filter_idxs]
-
-        c1, c0 = np.polyfit(thrust_filtered, mag_norm_filtered, 1)
-        fit_func = np.poly1d((c1, c0))
-
         p = data_plot.bokeh_plot
         p.circle(thrust_values_interp, mag_norm_values,
                 color=colors8[topic_instance],
                 legend_label=f'Magnetometer {topic_instance}')
+        max_mag_norm = np.max([max_mag_norm, np.max(mag_norm_values)])
 
-        polyfit_xs = np.linspace(0, 1, 100)
-        polyfit_ys = fit_func(polyfit_xs)
-        max_mag_norm = np.max([max_mag_norm, np.max(polyfit_ys)])
-        p.line(polyfit_xs, fit_func(polyfit_xs),
-                color=colors8[topic_instance],
-                legend_label=f'Fit {topic_instance}: y={c0:.3f} (1 + {c1/c0:.3f}x)')
+        filter_idxs = thrust_values_interp >= min_thrust
+        if np.any(filter_idxs):
+            mag_norm_filtered = mag_norm_values[filter_idxs]
+            thrust_filtered = thrust_values_interp[filter_idxs]
+
+            c1, c0 = np.polyfit(thrust_filtered, mag_norm_filtered, 1)
+            fit_func = np.poly1d((c1, c0))
+
+            polyfit_xs = np.linspace(0, 1, 100)
+            polyfit_ys = fit_func(polyfit_xs)
+            max_mag_norm = np.max([max_mag_norm, np.max(polyfit_ys)])
+            p.line(polyfit_xs, fit_func(polyfit_xs),
+                    color=colors8[topic_instance],
+                    legend_label=f'Fit {topic_instance}: y={c0:.3f} (1 + {c1/c0:.3f}x)')
 
 
-    p.x_range = Range1d(start=min_thrust, end=1)
+    p.x_range = Range1d(start=0, end=1)
     p.y_range = Range1d(start=0, end=max_mag_norm*1.1)
 
     if data_plot.finalize() is not None: plots.append(data_plot)
