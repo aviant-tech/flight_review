@@ -102,6 +102,54 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         vtol_states = None
 
 
+    # Horizontal acceptance
+    # Generates a list of tuples corresponding to changes in the
+    # horizontal acceptance status of the upcoming waypoint. The first
+    # item in the tuple is the change timestamp, and the second is a
+    # boolean giving the acceptance status
+    try:
+        cur_dataset = ulog.get_dataset('position_controller_status')
+        acceptance_radius = cur_dataset.data['acceptance_radius']
+        dist_to_wp = cur_dataset.data['wp_dist']
+        hor_acc = dist_to_wp <= acceptance_radius
+        hor_acc_change = np.where(hor_acc[1:] != hor_acc[:-1])[0]
+        hor_acc_idxs = np.append([0], hor_acc_change+1)
+        horizontal_acceptance = [(cur_dataset.data['timestamp'][i], hor_acc[i]) for i in hor_acc_idxs]
+        horizontal_acceptance.append((ulog.last_timestamp, False))
+    except (KeyError, IndexError) as error:
+        horizontal_acceptance = None
+
+    # Vertical acceptance
+    # Same as for horizontal acceptance, but using altitudes instead of
+    # horizontal distance. Since we have to compare the continuous
+    # altitude with the discrete next-waypoint altitude, the two lists are
+    # interjoined in a "last-value" interpolation.
+    try:
+        alt_acc_rad = ulog.initial_parameters['NAV_FW_ALT_RAD']
+        wp_dataset = ulog.get_dataset('navigator_mission_item')
+        wp_alts = wp_dataset.data['altitude']
+        wp_timestamps = wp_dataset.data['timestamp']
+
+        gpos_dataset = ulog.get_dataset('vehicle_global_position')
+        gpos_alts = gpos_dataset.data['alt']
+        gpos_timestamps = gpos_dataset.data['timestamp']
+        gpos_wp_alts = []
+
+        # "Last-value" interpolation due to differing time axes
+        cur_wp_idx = 0
+        for gpos_idx in range(len(gpos_timestamps)):
+            gpos_wp_alts.append(wp_alts[cur_wp_idx])
+            if (gpos_timestamps[gpos_idx] >= wp_timestamps[cur_wp_idx]
+                and cur_wp_idx < len(wp_timestamps)-1):
+                cur_wp_idx += 1
+
+        alt_acc = np.abs(gpos_alts-gpos_wp_alts) <= alt_acc_rad
+        alt_acc_change = np.where(alt_acc[1:] != alt_acc[:-1])[0]
+        alt_acc_idxs = np.append([0], alt_acc_change+1)
+        vertical_acceptance = [(gpos_timestamps[i], alt_acc[i]) for i in alt_acc_idxs]
+        vertical_acceptance.append((ulog.last_timestamp, False))
+    except (KeyError, IndexError) as error:
+        vertical_acceptance = None
 
     # Heading
     curdoc().template_variables['title_html'] = get_heading_html(
@@ -181,6 +229,86 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
     if data_plot.finalize() is not None: plots.append(data_plot)
 
+    # Waypoint tracking
+    def below_or_none(limit, data):
+        ''' Used to hide large outliers from plots '''
+        data[data >= limit] = None
+        return data
+
+    data_plot = DataPlot(data, plot_config, 'position_controller_status',
+                         title='Waypoint tracking', y_axis_label='[m]',
+                         changed_params=changed_params, x_range=x_range)
+    data_plot.add_graph([lambda data: ('wp_dist', below_or_none(9e5, data['wp_dist']))],
+            colors8[0:1], ['Distance to next WP'])
+    data_plot.add_graph(['acceptance_radius'], colors8[1:2], ['Acceptance radius'])
+    data_plot.change_dataset('navigator_mission_item')
+    data_plot.add_circle(['altitude'], [plot_config['mission_setpoint_color']], ['Waypoint altitude'])
+    data_plot.change_dataset('tecs_status')
+    data_plot.add_graph(['altitude_sp'], colors8[3:4], ['Altitude setpoint'])
+    data_plot.change_dataset('vehicle_global_position')
+    data_plot.add_graph(['alt'], colors8[4:5], ['Fused altitude'])
+    plot_wp_acceptance_background(data_plot, horizontal_acceptance, vertical_acceptance)
+
+    if data_plot.finalize() is not None: plots.append(data_plot)
+
+    # QuadChute
+
+    # PX4 uses a rolling average over the height rate and height rate setpoint
+    # to figure out if it should QuadChute
+    def quadchute_rolling_average(series):
+        AVERAGING_FACTOR = 1/50 # Hard coded value, should apparently give 1 second window
+        average_series = series.copy()
+        for i in range(1, len(series)):
+            average_series[i] = AVERAGING_FACTOR*series[i] + (1-AVERAGING_FACTOR)*average_series[i-1]
+        return average_series
+
+    data_plot = DataPlot(data, plot_config, 'tecs_status',
+                         title='QuadChute',
+                         changed_params=changed_params, x_range=x_range)
+    data_plot.add_graph([lambda data: ('altitude_error', data['altitude_filtered'] - data['altitude_sp'])],
+                        colors8[0:1], ['Altitude error [m]'])
+    data_plot.add_graph(['height_rate'], colors8[1:2], ['Height rate [m/s]'])
+    data_plot.add_graph([lambda data: ('height_rate_ra', quadchute_rolling_average(data['height_rate']))],
+                        colors8[2:3], ['Height rate, rolling average [m/s]'])
+    data_plot.add_graph(['height_rate_setpoint'], colors8[3:4], ['Height rate setpoint [m/s]'])
+    data_plot.add_graph([lambda data: ('height_rate_setpoint_ra', quadchute_rolling_average(data['height_rate_setpoint']))],
+                        colors8[4:5], ['Height rate setpoint, rolling average [m/s]'])
+    data_plot.change_dataset('actuator_controls_1')
+    data_plot.add_graph([lambda data: ('thrust', data['control[3]']*10)],
+                        colors8[5:6], ['Thrust [0, 10]'])
+    plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
+
+    if data_plot.finalize() is not None: plots.append(data_plot)
+
+    # Icing
+    data_plot = DataPlot(data, plot_config, 'actuator_controls_1',
+                         y_start=0, title='Icing',
+                         plot_height='small', changed_params=changed_params,
+                         x_range=x_range)
+    data_plot.add_graph([lambda data: ('thrust', data['control[3]']*10)],
+                        colors8[0:1], ['Thrust control [0,10]'], mark_nan=True)
+
+    data_plot.change_dataset('vehicle_attitude')
+    data_plot.add_graph([lambda data: ('pitch_estimated', np.rad2deg(data['pitch']))],
+                        colors8[1:2], ['Pitch estimated [deg]'])
+    data_plot.change_dataset('tecs_status')
+    data_plot.add_graph(['airspeed_filtered'], colors8[2:3], ['Airspeed filtered'])
+    if data_plot.finalize() is not None: plots.append(data_plot)
+
+    # Data link
+    data_plot = DataPlot(data, plot_config, 'telemetry_status',
+                         title='Data link',  changed_params=changed_params,
+                         x_range=x_range)
+    for link_id in range(3):
+        data_plot.change_dataset('telemetry_status', topic_instance=link_id)
+        if data_plot.dataset:
+            data_plot.add_graph(['heartbeats[%d].timestamp' % i for i in range(4)],
+                    colors8[link_id:link_id+1]*4,
+                    ['Link %d heartbeats %d' % (link_id, i) for i in range(4)])
+
+    plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
+
+    if data_plot.finalize() is not None: plots.append(data_plot)
 
 
     # Roll/Pitch/Yaw angle & angular rate
@@ -673,9 +801,11 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
                          y_axis_label='[gauss]', title='Raw Magnetic Field Strength',
                          plot_height='small', changed_params=changed_params,
                          x_range=x_range)
-    data_plot.add_graph(['magnetometer_ga[0]', 'magnetometer_ga[1]',
-                         'magnetometer_ga[2]'], colors3,
-                        ['X', 'Y', 'Z'])
+    for mag_instance in range(2):
+        data_plot.change_dataset(magnetometer_ga_topic, topic_instance=mag_instance)
+        data_plot.add_graph(['magnetometer_ga[0]', 'magnetometer_ga[1]',
+            'magnetometer_ga[2]'], colors8[3*mag_instance:3*mag_instance+3],
+                            [f'X (mag_{mag_instance})', f'Y (mag_{mag_instance})', f'Z (mag_{mag_instance})'])
     if data_plot.finalize() is not None: plots.append(data_plot)
 
 
@@ -713,39 +843,131 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     if data_plot.finalize() is not None: plots.append(data_plot)
 
 
-    # thrust and magnetic field
+    # thrust and magnetic field time series
     data_plot = DataPlot(data, plot_config, magnetometer_ga_topic,
                          y_start=0, title='Thrust and Magnetic Field', plot_height='small',
-                         changed_params=changed_params, x_range=x_range)
-    data_plot.add_graph(
-        [lambda data: ('len_mag', np.sqrt(data['magnetometer_ga[0]']**2 +
-                                          data['magnetometer_ga[1]']**2 +
-                                          data['magnetometer_ga[2]']**2))],
-        colors3[0:1], ['Norm of Magnetic Field'])
+                         changed_params=changed_params, x_range=x_range, topic_instance=1)
+
     data_plot.change_dataset('actuator_controls_0')
     data_plot.add_graph([lambda data: ('thrust', data['control[3]'])],
-                        colors3[1:2], ['Thrust'])
+                        colors8[0:1], ['Thrust'])
     if is_vtol:
         data_plot.change_dataset('actuator_controls_1')
         data_plot.add_graph([lambda data: ('thrust', data['control[3]'])],
-                            colors3[2:3], ['Thrust (Fixed-wing)'])
+                            colors8[1:2], ['Thrust (Fixed-wing)'])
+
+    for mag_instance in range(2):
+        data_plot.change_dataset(magnetometer_ga_topic, topic_instance=mag_instance)
+        data_plot.add_graph(
+            [lambda data: ('len_mag', np.sqrt(data['magnetometer_ga[0]']**2 +
+                                            data['magnetometer_ga[1]']**2 +
+                                            data['magnetometer_ga[2]']**2))],
+            colors8[2+mag_instance:2+mag_instance+1], [f'Norm of Magnetic Field (mag_{mag_instance})'])
+
+    if data_plot.finalize() is not None: plots.append(data_plot)
+
+    # thrust and magentic field scatter plot
+    min_thrust = 0.5
+    data_plot = DataPlot(data, plot_config, 'actuator_controls_0',
+                         title=f'Thrust and magnetic norm scatter plot (polyfit for thrust > {min_thrust})', plot_height='small',
+                         x_axis_label='Thrust', y_axis_label='Magnetic field norm')
+    data_plot.set_use_time_formatter(False)
+    thrust_timestamps = data_plot.dataset.data['timestamp']
+    thrust_values = data_plot.dataset.data['control[3]']
+
+    max_mag_norm = 0
+    for topic_instance in range(2):
+        data_plot.change_dataset(magnetometer_ga_topic, topic_instance=topic_instance)
+        if data_plot.dataset is None or not 'magnetometer_ga[0]' in data_plot.dataset.data:
+            continue
+        mag_norm_values = np.sqrt(
+            data_plot.dataset.data['magnetometer_ga[0]']**2
+            + data_plot.dataset.data['magnetometer_ga[1]']**2
+            + data_plot.dataset.data['magnetometer_ga[2]']**2
+        )
+        mag_timestamps = data_plot.dataset.data['timestamp']
+
+        # Bohek doesn't handle np.nan values, so we just remove them. Same as
+        # line 791 in plot_app/plotting.py on commit
+        # eba80b8d095ac85bbe2801b2583c78e984aa2ce4.
+        not_nan_idxs = np.logical_not(np.logical_or(
+            np.isnan(mag_timestamps),
+            np.isnan(mag_norm_values)
+        ))
+        mag_timestamps = mag_timestamps[not_nan_idxs]
+        mag_norm_values = mag_norm_values[not_nan_idxs]
+        # Some logs might have a single magnetometer measurement with a np.nan
+        # value. Not sure why, but in those cases we should just proceed to the
+        # next magnetometer.
+        if not np.any(not_nan_idxs):
+            continue
+
+        thrust_values_interp = np.interp(mag_timestamps, thrust_timestamps, thrust_values)
+
+        p = data_plot.bokeh_plot
+        p.circle(thrust_values_interp, mag_norm_values,
+                color=colors8[topic_instance],
+                legend_label=f'Magnetometer {topic_instance}')
+        max_mag_norm = np.max([max_mag_norm, np.max(mag_norm_values)])
+
+        filter_idxs = thrust_values_interp >= min_thrust
+        if np.any(filter_idxs):
+            mag_norm_filtered = mag_norm_values[filter_idxs]
+            thrust_filtered = thrust_values_interp[filter_idxs]
+
+            c1, c0 = np.polyfit(thrust_filtered, mag_norm_filtered, 1)
+            fit_func = np.poly1d((c1, c0))
+
+            polyfit_xs = np.linspace(0, 1, 100)
+            polyfit_ys = fit_func(polyfit_xs)
+            max_mag_norm = np.max([max_mag_norm, np.max(polyfit_ys)])
+            p.line(polyfit_xs, fit_func(polyfit_xs),
+                    color=colors8[topic_instance],
+                    legend_label=f'Fit {topic_instance}: y={c0:.3f} (1 + {c1/c0:.3f}x)')
+
+
+    p.x_range = Range1d(start=0, end=1)
+    p.y_range = Range1d(start=0, end=max_mag_norm*1.1)
+
     if data_plot.finalize() is not None: plots.append(data_plot)
 
 
 
-    # power
+    # pusher power (instance 0)
     data_plot = DataPlot(data, plot_config, 'battery_status',
-                         y_start=0, title='Power',
+                         y_start=0, title='Pusher power',
                          plot_height='small', changed_params=changed_params,
-                         x_range=x_range)
-    data_plot.add_graph(['voltage_v', 'voltage_filtered_v',
-                         'current_a', lambda data: ('discharged_mah', data['discharged_mah']/100),
-                         lambda data: ('remaining', data['remaining']*10)],
-                        colors8[::2]+colors8[1:2],
-                        ['Battery Voltage [V]', 'Battery Voltage filtered [V]',
-                         'Battery Current [A]', 'Discharged Amount [mAh / 100]',
-                         'Battery remaining [0=empty, 10=full]'])
-    data_plot.change_dataset('system_power')
+                         x_range=x_range, topic_instance=0)
+    if data_plot.dataset:
+        data_plot.add_graph(['voltage_v', 'voltage_filtered_v',
+                             'current_a', lambda data: ('discharged_mah', data['discharged_mah']/100),
+                             lambda data: ('remaining', data['remaining']*10)],
+                            colors8[::2]+colors8[1:2],
+                            ['Voltage [V]', 'Voltage filtered [V]',
+                             'Current [A]', 'Discharged [mAh / 100]',
+                             'Remaining [0=empty, 10=full]'])
+        if data_plot.finalize() is not None: plots.append(data_plot)
+
+    # top power (instance 1)
+    data_plot = DataPlot(data, plot_config, 'battery_status',
+                         y_start=0, title='Top power',
+                         plot_height='small', changed_params=changed_params,
+                         x_range=x_range, topic_instance=1)
+    if data_plot.dataset:
+        data_plot.add_graph(['voltage_v', 'voltage_filtered_v',
+                             'current_a', lambda data: ('discharged_mah', data['discharged_mah']/100),
+                             lambda data: ('remaining', data['remaining']*10)],
+                            colors8[::2]+colors8[1:2],
+                            ['Voltage [V]', 'Voltage filtered [V]',
+                             'Current [A]', 'Discharged [mAh / 100]',
+                             'Remaining [0=empty, 10=full]'])
+        if data_plot.finalize() is not None: plots.append(data_plot)
+
+    # system power
+    data_plot = DataPlot(data, plot_config, 'system_power',
+                         y_start=0, title='System power',
+                         plot_height='small', changed_params=changed_params,
+                         x_range=x_range, topic_instance=0)
     if data_plot.dataset:
         if 'voltage5v_v' in data_plot.dataset.data and \
                         np.amax(data_plot.dataset.data['voltage5v_v']) > 0.0001:
@@ -753,7 +975,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         if 'sensors3v3[0]' in data_plot.dataset.data and \
                         np.amax(data_plot.dataset.data['sensors3v3[0]']) > 0.0001:
             data_plot.add_graph(['sensors3v3[0]'], colors8[5:6], ['3.3 V'])
-    if data_plot.finalize() is not None: plots.append(data_plot)
+        if data_plot.finalize() is not None: plots.append(data_plot)
 
 
     #Temperature

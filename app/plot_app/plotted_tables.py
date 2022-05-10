@@ -261,7 +261,24 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
             table_text_right.append(('Max Altitude Difference', "{:.0f} m".format(max_alt_diff)))
 
         table_text_right.append(('', '')) # spacing
+    except:
+        pass
 
+    try:
+        # TECS statistics
+        tecs_status = ulog.get_dataset('tecs_status')
+        altitude_filtered = tecs_status.data['altitude_filtered']
+        altitude_sp = tecs_status.data['altitude_sp']
+        if len(altitude_filtered) > 0 and len(altitude_sp) > 0:
+            altitude_error = altitude_filtered - altitude_sp
+            standard_altitude_error = np.std(altitude_error)
+            table_text_right.append(
+                ('Standard Altitude Error', "{:.1f} m".format(standard_altitude_error)))
+
+    except:
+        pass
+
+    try:
         # Speed
         if len(vel_x) > 0:
             max_h_speed = np.amax(np.sqrt(np.square(vel_x) + np.square(vel_y)))
@@ -288,6 +305,10 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
 
             table_text_right.append(('', '')) # spacing
 
+    except:
+        pass
+
+    try:
         vehicle_attitude = ulog.get_dataset('vehicle_attitude')
         roll = vehicle_attitude.data['roll']
         pitch = vehicle_attitude.data['pitch']
@@ -307,29 +328,57 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
                 max_rot_speed*180/np.pi)))
 
         table_text_right.append(('', '')) # spacing
-
-        battery_status = ulog.get_dataset('battery_status')
-        battery_current = battery_status.data['current_a']
-        if len(battery_current) > 0:
-            max_current = np.amax(battery_current)
-            if max_current > 0.1:
-                if vtol_states is None:
-                    mean_current = np.mean(battery_current)
-                    table_text_right.append(('Average Current', "{:.1f} A".format(mean_current)))
-                else:
-                    mean_current_mc, mean_current_fw = _get_vtol_means_per_mode(
-                        vtol_states, battery_status.data['timestamp'], battery_current)
-                    if mean_current_mc is not None:
-                        table_text_right.append(
-                            ('Average Current MC', "{:.1f} A".format(mean_current_mc)))
-                    if mean_current_fw is not None:
-                        table_text_right.append(
-                            ('Average Current FW', "{:.1f} A".format(mean_current_fw)))
-
-                table_text_right.append(('Max Current', "{:.1f} A".format(max_current)))
     except:
-        pass # ignore (e.g. if topic not found)
+        pass
 
+    try:
+        circuits = [
+                {'label': 'Pusher', 'id': 0, 'type': 'FW', 'capacity': 40000},
+                {'label': 'Top', 'id': 1, 'type': 'MC', 'capacity': 6000},
+        ]
+    
+        for circuit in circuits:
+            battery_status = ulog.get_dataset('battery_status', multi_instance=circuit['id'])
+            battery_current = battery_status.data['current_a']
+            if len(battery_current) > 0:
+                max_current = np.amax(battery_current)
+                if max_current > 0.1:
+                    if vtol_states is None:
+                        mean_current = np.mean(battery_current)
+                    else:
+                        mean_current_mc, mean_current_fw = _get_vtol_means_per_mode(
+                            vtol_states, battery_status.data['timestamp'], battery_current)
+                        if circuit['type'] == 'MC':
+                            if mean_current_mc is not None:
+                                mean_current = mean_current_mc
+                            if mean_speed_mc is not None:
+                                mean_speed = mean_speed_mc
+                        elif circuit['type'] == 'FW':
+                            if mean_current_fw is not None:
+                                mean_current = mean_current_fw
+                            if mean_speed_fw is not None:
+                                mean_speed = mean_speed_fw
+    
+                    flight_time_s = circuit['capacity']*3.6 / mean_current
+                    flight_time_min = flight_time_s / 60
+                    max_range = flight_time_s * mean_speed
+    
+                    table_text_right.append(
+                        ('Average {} Current'.format(circuit['label']), "{:.1f} A".format(mean_current)))
+                    table_text_right.append(
+                        ('Max {} Current'.format(circuit['label']), "{:.1f} A".format(max_current)))
+                    table_text_right.append(
+                        ('Max {} Flight Time'.format(circuit['label']), "{:.1f} min".format(flight_time_min)))
+                    table_text_right.append(
+                        ('Max {} Flight Distance'.format(circuit['label']), "{:.1f} km".format(max_range/1000)))
+    
+            battery_consumed = battery_status.data['discharged_mah']
+            if len(battery_consumed) > 0:
+                total_consumed = battery_consumed[-1]
+                table_text_right.append(
+                    ('Consumed {} '.format(circuit['label']), "{:.1f} mAh".format(total_consumed)))
+    except Exception as error:
+        print(f"Error while handling battery information: {error}")
 
     # generate the tables
     def generate_html_table(rows_list, tooltip=None, max_width=None):

@@ -11,6 +11,7 @@ import uuid
 import binascii
 import sqlite3
 import tornado.web
+import json
 from tornado.ioloop import IOLoop
 
 from pyulog import ULog
@@ -90,6 +91,10 @@ class UploadHandler(TornadoRequestHandlerBase):
             if 'expected_size' in self.request.arguments:
                 self.request.connection.set_max_body_size(
                     int(self.get_argument('expected_size')))
+            else:
+                # Set max upload size to 10GB
+                self.request.connection.set_max_body_size(10*1024*1024*1024)
+
             try:
                 total = int(self.request.headers.get("Content-Length", "0"))
             except KeyError:
@@ -284,9 +289,12 @@ class UploadHandler(TornadoRequestHandlerBase):
                     # also generate the additional DB entry
                     # (we may have the log already loaded in 'ulog', however the
                     # lru cache will make it very quick to load it again)
+                    log_id = log_id
                     generate_db_data_from_log_file(log_id, con)
                     # also generate the preview image
                     IOLoop.instance().add_callback(generate_overview_img_from_id, log_id)
+
+
 
                 con.commit()
                 cur.close()
@@ -296,7 +304,28 @@ class UploadHandler(TornadoRequestHandlerBase):
                 send_notification_email(email, full_plot_url, delete_url, info)
 
                 # do not redirect for QGC
-                if source != 'QGroundControl':
+                if source == 'aviant_fms':
+                    gps_data = ulog.get_dataset('vehicle_gps_position')
+                    start_timestamp = 0
+                    end_timestamp = 0
+
+                    for timestamp in gps_data.data['time_utc_usec']:
+                        if timestamp > 0:
+                            start_timestamp = int(timestamp/1e6)
+                            break
+                    end_timestamp = int(gps_data.data['time_utc_usec'][-1]/1e6)
+
+                    utc_offset_min = ulog.initial_parameters.get('SDLOG_UTC_OFFSET', 0)
+                    start_timestamp += utc_offset_min * 60
+                    end_timestamp += utc_offset_min * 60
+
+                    self.write(json.dumps({
+                        'log_id': log_id,
+                        'vehicle_uuid': info['uuid'],
+                        'start_timestamp': start_timestamp,
+                        'end_timestamp': end_timestamp,
+                    }))
+                elif source != 'QGroundControl':
                     self.redirect(url)
 
             except CustomHTTPError:

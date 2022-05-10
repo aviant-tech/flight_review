@@ -11,6 +11,7 @@ __pycache__
 /app/config_user.ini
 
 data/img/*
-
 data/app_data
 data/certbot
+
+review_venv/
