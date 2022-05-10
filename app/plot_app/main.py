@@ -19,6 +19,7 @@ from db_entry import *
 from configured_plots import generate_plots
 from pid_analysis_plots import get_pid_analysis_plots
 from statistics_plots import StatisticsPlots
+from dbulog import DatabaseULog
 
 #pylint: disable=invalid-name, redefined-outer-name
 
@@ -107,16 +108,18 @@ else:
                 print('GET[log]={}'.format(log_id))
                 ulog_file_name = get_log_filename(log_id)
 
-        ulog = load_ulog_file(ulog_file_name)
+        try:
+            ulog = DatabaseULog(log_id, lambda: sqlite3.connect(get_db_filename()))
+            print(f'Found ULog {log_id} in database.')
+        except KeyError:
+            ulog = load_ulog_file(ulog_file_name)
+            print(f'Loading ULog {log_id} from file')
+
         px4_ulog = PX4ULog(ulog)
-        px4_ulog.add_roll_pitch_yaw()
 
     except ULogException:
         error_message = ('A parsing error occured when trying to read the file - '
                          'the log is most likely corrupt.')
-    except:
-        print("Error loading file:", sys.exc_info()[0], sys.exc_info()[1])
-        error_message = 'An error occured when trying to read the file.'
 
 
     print_timing("Data Loading", start_time)

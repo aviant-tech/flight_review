@@ -171,7 +171,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         curdoc().template_variables['corrupt_log_html'] = corrupt_log_html
 
     # Position plot
-    data_plot = DataPlot2D(data, plot_config, 'vehicle_local_position',
+    data_plot = DataPlot2D(ulog, plot_config, 'vehicle_local_position',
                            x_axis_label='[m]', y_axis_label='[m]', plot_height='large')
     data_plot.add_graph('y', 'x', colors2[0], 'Estimated',
                         check_if_all_zero=True)
@@ -210,7 +210,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     x_range = Range1d(ulog.start_timestamp - x_range_offset, ulog.last_timestamp + x_range_offset)
 
     # Altitude estimate
-    data_plot = DataPlot(data, plot_config, 'vehicle_gps_position',
+    data_plot = DataPlot(ulog, plot_config, 'vehicle_gps_position',
                          y_axis_label='[m]', title='Altitude Estimate',
                          changed_params=changed_params, x_range=x_range)
     data_plot.add_graph([lambda data: ('alt', data['alt']*0.001)],
@@ -235,7 +235,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         data[data >= limit] = None
         return data
 
-    data_plot = DataPlot(data, plot_config, 'position_controller_status',
+    data_plot = DataPlot(ulog, plot_config, 'position_controller_status',
                          title='Waypoint tracking', y_axis_label='[m]',
                          changed_params=changed_params, x_range=x_range)
     data_plot.add_graph([lambda data: ('wp_dist', below_or_none(9e5, data['wp_dist']))],
@@ -262,7 +262,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
             average_series[i] = AVERAGING_FACTOR*series[i] + (1-AVERAGING_FACTOR)*average_series[i-1]
         return average_series
 
-    data_plot = DataPlot(data, plot_config, 'tecs_status',
+    data_plot = DataPlot(ulog, plot_config, 'tecs_status',
                          title='QuadChute',
                          changed_params=changed_params, x_range=x_range)
     data_plot.add_graph([lambda data: ('altitude_error', data['altitude_filtered'] - data['altitude_sp'])],
@@ -281,7 +281,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     if data_plot.finalize() is not None: plots.append(data_plot)
 
     # Icing
-    data_plot = DataPlot(data, plot_config, 'actuator_controls_1',
+    data_plot = DataPlot(ulog, plot_config, 'actuator_controls_1',
                          y_start=0, title='Icing',
                          plot_height='small', changed_params=changed_params,
                          x_range=x_range)
@@ -296,7 +296,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     if data_plot.finalize() is not None: plots.append(data_plot)
 
     # Data link
-    data_plot = DataPlot(data, plot_config, 'telemetry_status',
+    data_plot = DataPlot(ulog, plot_config, 'telemetry_status',
                          title='Data link',  changed_params=changed_params,
                          x_range=x_range)
     for link_id in range(3):
@@ -312,18 +312,24 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
     # Roll/Pitch/Yaw angle & angular rate
+    angle_functions = [
+        lambda data, s='': np.arctan2(2.0 * (data[f'q{s}[0]'] * data[f'q{s}[1]'] + data[f'q{s}[2]'] * data[f'q{s}[3]']), 1.0 - 2.0 * (data[f'q{s}[1]'] * data[f'q{s}[1]'] + data[f'q{s}[2]'] * data[f'q{s}[2]'])),
+        lambda data, s='': np.arcsin(2.0 * (data[f'q{s}[0]'] * data[f'q{s}[2]'] - data[f'q{s}[3]'] * data[f'q{s}[1]'])),
+        lambda data, s='': np.arctan2(2.0 * (data[f'q{s}[0]'] * data[f'q{s}[3]'] + data[f'q{s}[1]'] * data[f'q{s}[2]']), 1.0 - 2.0 * (data[f'q{s}[2]'] * data[f'q{s}[2]'] + data[f'q{s}[3]'] * data[f'q{s}[3]'])),
+
+    ]
     for index, axis in enumerate(['roll', 'pitch', 'yaw']):
 
         # angle
         axis_name = axis.capitalize()
-        data_plot = DataPlot(data, plot_config, 'vehicle_attitude',
+        data_plot = DataPlot(ulog, plot_config, 'vehicle_attitude',
                              y_axis_label='[deg]', title=axis_name+' Angle',
                              plot_height='small', changed_params=changed_params,
                              x_range=x_range)
-        data_plot.add_graph([lambda data: (axis, np.rad2deg(data[axis]))],
+        data_plot.add_graph([lambda data: (axis, np.rad2deg(angle_functions[index](data)))],
                             colors3[0:1], [axis_name+' Estimated'], mark_nan=True)
         data_plot.change_dataset('vehicle_attitude_setpoint')
-        data_plot.add_graph([lambda data: (axis+'_d', np.rad2deg(data[axis+'_d']))],
+        data_plot.add_graph([lambda data: (axis+'_d', np.rad2deg(angle_functions[index](data, s='_d')))],
                             colors3[1:2], [axis_name+' Setpoint'],
                             use_step_lines=True)
         if axis == 'yaw':
@@ -339,7 +345,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         if data_plot.finalize() is not None: plots.append(data_plot)
 
         # rate
-        data_plot = DataPlot(data, plot_config, rate_estimated_topic_name,
+        data_plot = DataPlot(ulog, plot_config, rate_estimated_topic_name,
                              y_axis_label='[deg/s]', title=axis_name+' Angular Rate',
                              plot_height='small', changed_params=changed_params,
                              x_range=x_range)
@@ -372,7 +378,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
     # Local position
     for axis in ['x', 'y', 'z']:
-        data_plot = DataPlot(data, plot_config, 'vehicle_local_position',
+        data_plot = DataPlot(ulog, plot_config, 'vehicle_local_position',
                              y_axis_label='[m]', title='Local Position '+axis.upper(),
                              plot_height='small', changed_params=changed_params,
                              x_range=x_range)
@@ -387,7 +393,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
     # Velocity
-    data_plot = DataPlot(data, plot_config, 'vehicle_local_position',
+    data_plot = DataPlot(ulog, plot_config, 'vehicle_local_position',
                          y_axis_label='[m/s]', title='Velocity',
                          plot_height='small', changed_params=changed_params,
                          x_range=x_range)
@@ -403,7 +409,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     # Visual Odometry (only if topic found)
     if any(elem.name == 'vehicle_visual_odometry' for elem in data):
         # Vision position
-        data_plot = DataPlot(data, plot_config, 'vehicle_visual_odometry',
+        data_plot = DataPlot(ulog, plot_config, 'vehicle_visual_odometry',
                              y_axis_label='[m]', title='Visual Odometry Position',
                              plot_height='small', changed_params=changed_params,
                              x_range=x_range)
@@ -418,7 +424,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
         # Vision velocity
-        data_plot = DataPlot(data, plot_config, 'vehicle_visual_odometry',
+        data_plot = DataPlot(ulog, plot_config, 'vehicle_visual_odometry',
                              y_axis_label='[m]', title='Visual Odometry Velocity',
                              plot_height='small', changed_params=changed_params,
                              x_range=x_range)
@@ -432,7 +438,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
         # Vision attitude
-        data_plot = DataPlot(data, plot_config, 'vehicle_visual_odometry',
+        data_plot = DataPlot(ulog, plot_config, 'vehicle_visual_odometry',
                              y_axis_label='[deg]', title='Visual Odometry Attitude',
                              plot_height='small', changed_params=changed_params,
                              x_range=x_range)
@@ -452,7 +458,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         if data_plot.finalize() is not None: plots.append(data_plot)
 
         # Vision attitude rate
-        data_plot = DataPlot(data, plot_config, 'vehicle_visual_odometry',
+        data_plot = DataPlot(ulog, plot_config, 'vehicle_visual_odometry',
                              y_axis_label='[deg]', title='Visual Odometry Attitude Rate',
                              plot_height='small', changed_params=changed_params,
                              x_range=x_range)
@@ -473,7 +479,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         if data_plot.finalize() is not None: plots.append(data_plot)
 
         # Vision latency
-        data_plot = DataPlot(data, plot_config, 'vehicle_visual_odometry',
+        data_plot = DataPlot(ulog, plot_config, 'vehicle_visual_odometry',
                              y_axis_label='[ms]', title='Visual Odometry Latency',
                              plot_height='small', changed_params=changed_params,
                              x_range=x_range)
@@ -487,7 +493,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     # Airspeed vs Ground speed: but only if there's valid airspeed data or a VTOL
     try:
         if is_vtol or ulog.get_dataset('airspeed') is not None:
-            data_plot = DataPlot(data, plot_config, 'vehicle_global_position',
+            data_plot = DataPlot(ulog, plot_config, 'vehicle_global_position',
                                  y_axis_label='[m/s]', title='Airspeed',
                                  plot_height='small',
                                  changed_params=changed_params, x_range=x_range)
@@ -518,7 +524,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         pass
 
     # TECS (fixed-wing or VTOLs)
-    data_plot = DataPlot(data, plot_config, 'tecs_status', y_start=0, title='TECS',
+    data_plot = DataPlot(ulog, plot_config, 'tecs_status', y_start=0, title='TECS',
                          y_axis_label='[m/s]', plot_height='small',
                          changed_params=changed_params, x_range=x_range)
     data_plot.add_graph(['height_rate', 'height_rate_setpoint'],
@@ -531,7 +537,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     # manual control inputs
     # prefer the manual_control_setpoint topic. Old logs do not contain it
     if any(elem.name == 'manual_control_setpoint' for elem in data):
-        data_plot = DataPlot(data, plot_config, 'manual_control_setpoint',
+        data_plot = DataPlot(ulog, plot_config, 'manual_control_setpoint',
                              title='Manual Control Inputs (Radio or Joystick)',
                              plot_height='small', y_range=Range1d(-1.1, 1.1),
                              changed_params=changed_params, x_range=x_range)
@@ -548,7 +554,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         if data_plot.finalize() is not None: plots.append(data_plot)
 
     else: # it's an old log (COMPATIBILITY)
-        data_plot = DataPlot(data, plot_config, 'rc_channels',
+        data_plot = DataPlot(ulog, plot_config, 'rc_channels',
                              title='Raw Radio Control Inputs',
                              plot_height='small', y_range=Range1d(-1.1, 1.1),
                              changed_params=changed_params, x_range=x_range)
@@ -572,7 +578,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
     # actuator controls 0
-    data_plot = DataPlot(data, plot_config, 'actuator_controls_0',
+    data_plot = DataPlot(ulog, plot_config, 'actuator_controls_0',
                          y_start=0, title='Actuator Controls 0', plot_height='small',
                          changed_params=changed_params, x_range=x_range)
     data_plot.add_graph(['control[0]', 'control[1]', 'control[2]', 'control[3]'],
@@ -581,7 +587,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     if data_plot.finalize() is not None: plots.append(data_plot)
 
     # actuator controls (Main) FFT (for filter & output noise analysis)
-    data_plot = DataPlotFFT(data, plot_config, 'actuator_controls_0',
+    data_plot = DataPlotFFT(ulog, plot_config, 'actuator_controls_0',
                             title='Actuator Controls FFT', y_range = Range1d(0, 0.01))
     data_plot.add_graph(['control[0]', 'control[1]', 'control[2]'],
                         colors3, ['Roll', 'Pitch', 'Yaw'])
@@ -603,7 +609,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
     # angular_velocity FFT (for filter & output noise analysis)
-    data_plot = DataPlotFFT(data, plot_config, 'vehicle_angular_velocity',
+    data_plot = DataPlotFFT(ulog, plot_config, 'vehicle_angular_velocity',
                             title='Angular Velocity FFT', y_range = Range1d(0, 0.01))
     data_plot.add_graph(['xyz[0]', 'xyz[1]', 'xyz[2]'],
                         colors3, ['Rollspeed', 'Pitchspeed', 'Yawspeed'])
@@ -622,7 +628,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
     # angular_acceleration FFT (for filter & output noise analysis)
-    data_plot = DataPlotFFT(data, plot_config, 'vehicle_angular_acceleration',
+    data_plot = DataPlotFFT(ulog, plot_config, 'vehicle_angular_acceleration',
                             title='Angular Acceleration FFT')
     data_plot.add_graph(['xyz[0]', 'xyz[1]', 'xyz[2]'],
                         colors3, ['Roll accel', 'Pitch accel', 'Yaw accel'])
@@ -642,7 +648,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
     # actuator controls 1
     # (only present on VTOL, Fixed-wing config)
-    data_plot = DataPlot(data, plot_config, 'actuator_controls_1',
+    data_plot = DataPlot(ulog, plot_config, 'actuator_controls_1',
                          y_start=0, title='Actuator Controls 1 (VTOL in Fixed-Wing mode)',
                          plot_height='small', changed_params=changed_params,
                          x_range=x_range)
@@ -655,7 +661,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
                              (2, "Actuator Outputs (EXTRA)")]
     for topic_instance, plot_name in actuator_output_plots:
 
-        data_plot = DataPlot(data, plot_config, 'actuator_outputs',
+        data_plot = DataPlot(ulog, plot_config, 'actuator_outputs',
                              y_start=0, title=plot_name, plot_height='small',
                              changed_params=changed_params, topic_instance=topic_instance,
                              x_range=x_range)
@@ -681,7 +687,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
             if data_plot.finalize() is not None: plots.append(data_plot)
 
     # raw acceleration
-    data_plot = DataPlot(data, plot_config, 'sensor_combined',
+    data_plot = DataPlot(ulog, plot_config, 'sensor_combined',
                          y_axis_label='[m/s^2]', title='Raw Acceleration',
                          plot_height='small', changed_params=changed_params,
                          x_range=x_range)
@@ -690,7 +696,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     if data_plot.finalize() is not None: plots.append(data_plot)
 
     # Vibration Metrics
-    data_plot = DataPlot(data, plot_config, 'estimator_status',
+    data_plot = DataPlot(ulog, plot_config, 'estimator_status',
                          title='Vibration Metrics',
                          plot_height='small', changed_params=changed_params,
                          x_range=x_range, y_start=0)
@@ -701,7 +707,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     if data_plot.finalize() is not None: plots.append(data_plot)
 
     # Acceleration Spectrogram
-    data_plot = DataPlotSpec(data, plot_config, 'sensor_combined',
+    data_plot = DataPlotSpec(ulog, plot_config, 'sensor_combined',
                              y_axis_label='[Hz]', title='Acceleration Power Spectral Density',
                              plot_height='small', x_range=x_range)
     data_plot.add_graph(['accelerometer_m_s2[0]', 'accelerometer_m_s2[1]', 'accelerometer_m_s2[2]'],
@@ -710,7 +716,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
     # Filtered Gyro (angular velocity) Spectrogram
-    data_plot = DataPlotSpec(data, plot_config, 'vehicle_angular_velocity',
+    data_plot = DataPlotSpec(ulog, plot_config, 'vehicle_angular_velocity',
                              y_axis_label='[Hz]', title='Angular velocity Power Spectral Density',
                              plot_height='small', x_range=x_range)
     data_plot.add_graph(['xyz[0]', 'xyz[1]', 'xyz[2]'],
@@ -720,7 +726,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
     # Filtered angular acceleration Spectrogram
-    data_plot = DataPlotSpec(data, plot_config, 'vehicle_angular_acceleration',
+    data_plot = DataPlotSpec(ulog, plot_config, 'vehicle_angular_acceleration',
                              y_axis_label='[Hz]',
                              title='Angular acceleration Power Spectral Density',
                              plot_height='small', x_range=x_range)
@@ -731,7 +737,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
     # raw angular speed
-    data_plot = DataPlot(data, plot_config, 'sensor_combined',
+    data_plot = DataPlot(ulog, plot_config, 'sensor_combined',
                          y_axis_label='[deg/s]', title='Raw Angular Speed (Gyroscope)',
                          plot_height='small', changed_params=changed_params,
                          x_range=x_range)
@@ -745,7 +751,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     # FIFO accel
     if add_virtual_fifo_topic_data(ulog, 'sensor_accel_fifo'):
         # Raw data
-        data_plot = DataPlot(data, plot_config, 'sensor_accel_fifo_virtual',
+        data_plot = DataPlot(ulog, plot_config, 'sensor_accel_fifo_virtual',
                              y_axis_label='[m/s^2]', title='Raw Acceleration (FIFO)',
                              plot_height='small', changed_params=changed_params,
                              x_range=x_range)
@@ -753,7 +759,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         if data_plot.finalize() is not None: plots.append(data_plot)
 
         # power spectral density
-        data_plot = DataPlotSpec(data, plot_config, 'sensor_accel_fifo_virtual',
+        data_plot = DataPlotSpec(ulog, plot_config, 'sensor_accel_fifo_virtual',
                                  y_axis_label='[Hz]',
                                  title='Acceleration Power Spectral Density (FIFO)',
                                  plot_height='normal', x_range=x_range)
@@ -761,7 +767,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         if data_plot.finalize() is not None: plots.append(data_plot)
 
         # sampling regularity
-        data_plot = DataPlot(data, plot_config, 'sensor_accel_fifo', y_range=Range1d(0, 25e3),
+        data_plot = DataPlot(ulog, plot_config, 'sensor_accel_fifo', y_range=Range1d(0, 25e3),
                              y_axis_label='[us]',
                              title='Sampling Regularity of Sensor Data (FIFO)', plot_height='small',
                              changed_params=changed_params, x_range=x_range)
@@ -776,7 +782,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     # FIFO gyro
     if add_virtual_fifo_topic_data(ulog, 'sensor_gyro_fifo'):
         # Raw data
-        data_plot = DataPlot(data, plot_config, 'sensor_gyro_fifo_virtual',
+        data_plot = DataPlot(ulog, plot_config, 'sensor_gyro_fifo_virtual',
                              y_axis_label='[m/s^2]', title='Raw Gyro (FIFO)',
                              plot_height='small', changed_params=changed_params,
                              x_range=x_range)
@@ -789,7 +795,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         if data_plot.finalize() is not None: plots.append(data_plot)
 
         # power spectral density
-        data_plot = DataPlotSpec(data, plot_config, 'sensor_gyro_fifo_virtual',
+        data_plot = DataPlotSpec(ulog, plot_config, 'sensor_gyro_fifo_virtual',
                                  y_axis_label='[Hz]', title='Gyro Power Spectral Density (FIFO)',
                                  plot_height='normal', x_range=x_range)
         data_plot.add_graph(['x', 'y', 'z'], ['X', 'Y', 'Z'])
@@ -797,7 +803,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
     # magnetic field strength
-    data_plot = DataPlot(data, plot_config, magnetometer_ga_topic,
+    data_plot = DataPlot(ulog, plot_config, magnetometer_ga_topic,
                          y_axis_label='[gauss]', title='Raw Magnetic Field Strength',
                          plot_height='small', changed_params=changed_params,
                          x_range=x_range)
@@ -810,7 +816,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
     # distance sensor
-    data_plot = DataPlot(data, plot_config, 'distance_sensor',
+    data_plot = DataPlot(ulog, plot_config, 'distance_sensor',
                          y_start=0, y_axis_label='[m]', title='Distance Sensor',
                          plot_height='small', changed_params=changed_params,
                          x_range=x_range)
@@ -823,7 +829,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     # gps uncertainty
     # the accuracy values can be really large if there is no fix, so we limit the
     # y axis range to some sane values
-    data_plot = DataPlot(data, plot_config, 'vehicle_gps_position',
+    data_plot = DataPlot(ulog, plot_config, 'vehicle_gps_position',
                          title='GPS Uncertainty', y_range=Range1d(0, 40),
                          plot_height='small', changed_params=changed_params,
                          x_range=x_range)
@@ -834,7 +840,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
     # gps noise & jamming
-    data_plot = DataPlot(data, plot_config, 'vehicle_gps_position',
+    data_plot = DataPlot(ulog, plot_config, 'vehicle_gps_position',
                          y_start=0, title='GPS Noise & Jamming',
                          plot_height='small', changed_params=changed_params,
                          x_range=x_range)
@@ -843,8 +849,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     if data_plot.finalize() is not None: plots.append(data_plot)
 
 
-    # thrust and magnetic field time series
-    data_plot = DataPlot(data, plot_config, magnetometer_ga_topic,
+    data_plot = DataPlot(ulog, plot_config, magnetometer_ga_topic,
                          y_start=0, title='Thrust and Magnetic Field', plot_height='small',
                          changed_params=changed_params, x_range=x_range, topic_instance=1)
 
@@ -868,7 +873,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
     # thrust and magentic field scatter plot
     min_thrust = 0.5
-    data_plot = DataPlot(data, plot_config, 'actuator_controls_0',
+    data_plot = DataPlot(ulog, plot_config, 'actuator_controls_0',
                          title=f'Thrust and magnetic norm scatter plot (polyfit for thrust > {min_thrust})', plot_height='small',
                          x_axis_label='Thrust', y_axis_label='Magnetic field norm')
     data_plot.set_use_time_formatter(False)
@@ -934,7 +939,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
     # pusher power (instance 0)
-    data_plot = DataPlot(data, plot_config, 'battery_status',
+    data_plot = DataPlot(ulog, plot_config, 'battery_status',
                          y_start=0, title='Pusher power',
                          plot_height='small', changed_params=changed_params,
                          x_range=x_range, topic_instance=0)
@@ -949,7 +954,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         if data_plot.finalize() is not None: plots.append(data_plot)
 
     # top power (instance 1)
-    data_plot = DataPlot(data, plot_config, 'battery_status',
+    data_plot = DataPlot(ulog, plot_config, 'battery_status',
                          y_start=0, title='Top power',
                          plot_height='small', changed_params=changed_params,
                          x_range=x_range, topic_instance=1)
@@ -964,7 +969,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         if data_plot.finalize() is not None: plots.append(data_plot)
 
     # system power
-    data_plot = DataPlot(data, plot_config, 'system_power',
+    data_plot = DataPlot(ulog, plot_config, 'system_power',
                          y_start=0, title='System power',
                          plot_height='small', changed_params=changed_params,
                          x_range=x_range, topic_instance=0)
@@ -979,7 +984,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
     #Temperature
-    data_plot = DataPlot(data, plot_config, 'sensor_baro',
+    data_plot = DataPlot(ulog, plot_config, 'sensor_baro',
                          y_start=0, y_axis_label='[C]', title='Temperature',
                          plot_height='small', changed_params=changed_params,
                          x_range=x_range)
@@ -999,7 +1004,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
     # estimator watchdog
     try:
-        data_plot = DataPlot(data, plot_config, 'estimator_status',
+        data_plot = DataPlot(ulog, plot_config, 'estimator_status',
                              y_start=0, title='Estimator Watchdog',
                              plot_height='small', changed_params=changed_params,
                              x_range=x_range)
@@ -1042,7 +1047,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
     # RC Quality
-    data_plot = DataPlot(data, plot_config, 'input_rc',
+    data_plot = DataPlot(ulog, plot_config, 'input_rc',
                          title='RC Quality', plot_height='small', y_range=Range1d(0, 1),
                          changed_params=changed_params, x_range=x_range)
     data_plot.add_graph([lambda data: ('rssi', data['rssi']/100), 'rc_lost'],
@@ -1054,7 +1059,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
     # cpu load
-    data_plot = DataPlot(data, plot_config, 'cpuload',
+    data_plot = DataPlot(ulog, plot_config, 'cpuload',
                          title='CPU & RAM', plot_height='small', y_range=Range1d(0, 1),
                          changed_params=changed_params, x_range=x_range)
     data_plot.add_graph(['ram_usage', 'load'], [colors3[1], colors3[2]],
@@ -1067,7 +1072,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
     # sampling: time difference
     try:
-        data_plot = DataPlot(data, plot_config, 'sensor_combined', y_range=Range1d(0, 25e3),
+        data_plot = DataPlot(ulog, plot_config, 'sensor_combined', y_range=Range1d(0, 25e3),
                              y_axis_label='[us]',
                              title='Sampling Regularity of Sensor Data', plot_height='small',
                              changed_params=changed_params, x_range=x_range)

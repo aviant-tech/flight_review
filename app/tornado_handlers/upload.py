@@ -16,6 +16,7 @@ from tornado.ioloop import IOLoop
 
 from pyulog import ULog
 from pyulog.px4 import PX4ULog
+from dbulog import DatabaseULog
 
 # this is needed for the following imports
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../plot_app'))
@@ -207,6 +208,8 @@ class UploadHandler(TornadoRequestHandlerBase):
                 if source != 'CI':
                     ulog_file_name = get_log_filename(log_id)
                     ulog = load_ulog_file(ulog_file_name)
+                    dbulog = DatabaseULog(log_id, lambda: sqlite3.connect(get_db_filename()), ulog=ulog)
+                    dbulog.save()
 
 
                 # put additional data into a DB
