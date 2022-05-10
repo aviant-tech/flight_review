@@ -30,23 +30,35 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     data = ulog.data_list
 
     # COMPATIBILITY support for old logs
-    if any(elem.name == 'vehicle_air_data' or elem.name == 'vehicle_magnetometer' for elem in data):
+    if any(elem.name in ('vehicle_air_data', 'vehicle_magnetometer')
+           for elem in ulog.data_list):
         baro_alt_meter_topic = 'vehicle_air_data'
         magnetometer_ga_topic = 'vehicle_magnetometer'
     else: # old
         baro_alt_meter_topic = 'sensor_combined'
         magnetometer_ga_topic = 'sensor_combined'
-    for topic in data:
+
+    true_airspeed_sp_fieldname = 'true_airspeed_sp'
+    voltage5v_fieldname = 'voltage5v_v'
+    voltage3v_fieldname = 'sensors3v3[0]'
+    for topic in ulog.data_list:
         if topic.name == 'system_power':
             # COMPATIBILITY: rename fields to new format
-            if 'voltage5V_v' in topic.data:     # old (prior to PX4/Firmware:213aa93)
-                topic.data['voltage5v_v'] = topic.data.pop('voltage5V_v')
-            if 'voltage3V3_v' in topic.data:    # old (prior to PX4/Firmware:213aa93)
-                topic.data['sensors3v3[0]'] = topic.data.pop('voltage3V3_v')
-            if 'voltage3v3_v' in topic.data:
-                topic.data['sensors3v3[0]'] = topic.data.pop('voltage3v3_v')
+            # old (prior to PX4/Firmware:213aa93)
+            if any(field.field_name == 'voltage5V_v' for field in topic.field_data):
+                voltage5v_fieldname = 'voltage5V_v'
 
-    if any(elem.name == 'vehicle_angular_velocity' for elem in data):
+            # old (prior to PX4/Firmware:213aa93)
+            if any(field.field_name == 'voltage3V3_v' for field in topic.field_data):
+                voltage3v_fieldname = 'voltage3V3_v'
+            elif any(field.field_name == 'voltage3v3_v' for field in topic.field_data):
+                voltage3v_fieldname = 'voltage3v3_v'
+
+        if topic.name == 'tecs_status' and any(field.field_name == 'airspeed_sp'
+                                               for field in topic.field_data):
+            true_airspeed_sp_fieldname = 'airspeed_sp'
+
+    if any(elem.name == 'vehicle_angular_velocity' for elem in ulog.data_list):
         rate_estimated_topic_name = 'vehicle_angular_velocity'
         rate_groundtruth_topic_name = 'vehicle_angular_velocity_groundtruth'
         rate_field_names = ['xyz[0]', 'xyz[1]', 'xyz[2]']
@@ -54,7 +66,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         rate_estimated_topic_name = 'vehicle_attitude'
         rate_groundtruth_topic_name = 'vehicle_attitude_groundtruth'
         rate_field_names = ['rollspeed', 'pitchspeed', 'yawspeed']
-    if any(elem.name == 'manual_control_switches' for elem in data):
+    if any(elem.name == 'manual_control_switches' for elem in ulog.data_list):
         manual_control_switches_topic = 'manual_control_switches'
     else: # old
         manual_control_switches_topic = 'manual_control_setpoint'
@@ -404,7 +416,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
     # Visual Odometry (only if topic found)
-    if any(elem.name == 'vehicle_visual_odometry' for elem in data):
+    if any(elem.name == 'vehicle_visual_odometry' for elem in ulog.data_list):
         # Vision position
         data_plot = DataPlot(ulog, plot_config, 'vehicle_visual_odometry',
                              y_axis_label='[m]', title='Visual Odometry Position',
@@ -483,7 +495,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
             data_plot.add_graph([lambda data: ('groundspeed_estimated',
                                                np.sqrt(data['vel_n']**2 + data['vel_e']**2))],
                                 colors8[0:1], ['Ground Speed Estimated'])
-            if any(elem.name == 'airspeed_validated' for elem in data):
+            if any(elem.name == 'airspeed_validated' for elem in ulog.data_list):
                 airspeed_validated = ulog.get_dataset('airspeed_validated')
                 data_plot.change_dataset('airspeed_validated')
                 if np.amax(airspeed_validated.data['airspeed_sensor_measurement_valid']) == 1:
@@ -499,8 +511,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
             data_plot.change_dataset('vehicle_gps_position')
             data_plot.add_graph(['vel_m_s'], colors8[2:3], ['Ground Speed (from GPS)'])
             data_plot.change_dataset('tecs_status')
-            data_plot.add_graph(['airspeed_sp'], colors8[3:4], ['Airspeed Setpoint'])
-
+            data_plot.add_graph([true_airspeed_sp_fieldname], colors8[3:4], ['True Airspeed Setpoint'])
             plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
 
             if data_plot.finalize() is not None: plots.append(data_plot)
@@ -520,7 +531,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
     # manual control inputs
     # prefer the manual_control_setpoint topic. Old logs do not contain it
-    if any(elem.name == 'manual_control_setpoint' for elem in data):
+    if any(elem.name == 'manual_control_setpoint' for elem in ulog.data_list):
         data_plot = DataPlot(ulog, plot_config, 'manual_control_setpoint',
                              title='Manual Control Inputs (Radio or Joystick)',
                              plot_height='small', y_range=Range1d(-1.1, 1.1),
@@ -910,13 +921,13 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
                          plot_height='small', changed_params=changed_params,
                          x_range=x_range, topic_instance=0)
     if data_plot.dataset:
-        if 'voltage5v_v' in data_plot.dataset.data and \
-                        np.amax(data_plot.dataset.data['voltage5v_v']) > 0.0001:
-            data_plot.add_graph(['voltage5v_v'], colors8[7:8], ['5 V'])
-        if 'sensors3v3[0]' in data_plot.dataset.data and \
-                        np.amax(data_plot.dataset.data['sensors3v3[0]']) > 0.0001:
-            data_plot.add_graph(['sensors3v3[0]'], colors8[5:6], ['3.3 V'])
-        if data_plot.finalize() is not None: plots.append(data_plot)
+        if voltage5v_fieldname in data_plot.dataset.data and \
+                        np.amax(data_plot.dataset.data[voltage5v_fieldname]) > 0.0001:
+            data_plot.add_graph([voltage5v_fieldname], colors8[7:8], ['5 V'])
+        if voltage3v_fieldname in data_plot.dataset.data and \
+                        np.amax(data_plot.dataset.data[voltage3v_fieldname]) > 0.0001:
+            data_plot.add_graph([voltage3v_fieldname], colors8[5:6], ['3.3 V'])
+    if data_plot.finalize() is not None: plots.append(data_plot)
 
 
     #Temperature
