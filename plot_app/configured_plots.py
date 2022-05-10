@@ -821,6 +821,22 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
             + data_plot.dataset.data['magnetometer_ga[2]']**2
         )
         mag_timestamps = data_plot.dataset.data['timestamp']
+
+        # Bohek doesn't handle np.nan values, so we just remove them. Same as
+        # line 791 in plot_app/plotting.py on commit
+        # eba80b8d095ac85bbe2801b2583c78e984aa2ce4.
+        not_nan_idxs = np.logical_not(np.logical_or(
+            np.isnan(mag_timestamps),
+            np.isnan(mag_norm_values)
+        ))
+        mag_timestamps = mag_timestamps[not_nan_idxs]
+        mag_norm_values = mag_norm_values[not_nan_idxs]
+        # Some logs might have a single magnetometer measurement with a np.nan
+        # value. Not sure why, but in those cases we should just proceed to the
+        # next magnetometer.
+        if not np.any(not_nan_idxs):
+            continue
+
         thrust_values_interp = np.interp(mag_timestamps, thrust_timestamps, thrust_values)
 
         p = data_plot.bokeh_plot
