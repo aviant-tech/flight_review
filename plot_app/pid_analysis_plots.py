@@ -45,13 +45,12 @@ The analysis may take a while...
         'PID Analysis') + page_intro
 
     plots = []
-    data = ulog.data_list
     flight_mode_changes = get_flight_mode_changes(ulog)
     x_range_offset = (ulog.last_timestamp - ulog.start_timestamp) * 0.05
     x_range = Range1d(ulog.start_timestamp - x_range_offset, ulog.last_timestamp + x_range_offset)
 
     # COMPATIBILITY support for old logs
-    if any(elem.name == 'vehicle_angular_velocity' for elem in data):
+    if any(elem.name == 'vehicle_angular_velocity' for elem in ulog.data_list):
         rate_topic_name = 'vehicle_angular_velocity'
         rate_field_names = ['xyz[0]', 'xyz[1]', 'xyz[2]']
     else: # old
@@ -92,7 +91,7 @@ The analysis may take a while...
     for index, axis in enumerate(['roll', 'pitch', 'yaw']):
         axis_name = axis.capitalize()
         # rate
-        data_plot = DataPlot(data, plot_config, 'actuator_controls_0',
+        data_plot = DataPlot(ulog, plot_config, 'actuator_controls_0',
                              y_axis_label='[deg/s]', title=axis_name+' Angular Rate',
                              plot_height='small',
                              x_range=x_range)
@@ -149,7 +148,7 @@ The analysis may take a while...
                                      np.rad2deg(vehicle_rates_setpoint.data[axis]),
                                      gyro_time)
                 trace = Trace(axis, time_seconds, gyro_rate, setpoint, throttle)
-                plots.append(plot_pid_response(trace, ulog.data_list, plot_config).bokeh_plot)
+                plots.append(plot_pid_response(trace, ulog, plot_config).bokeh_plot)
             except Exception as e:
                 print(type(e), axis, ":", e)
                 div = Div(text="<p><b>Error</b>: PID analysis failed. Possible "
@@ -176,7 +175,7 @@ The analysis may take a while...
                                      np.rad2deg(vehicle_attitude_setpoint.data[axis+'_d']),
                                      attitude_time)
                 trace = Trace(axis, time_seconds, attitude_estimated, setpoint, throttle)
-                plots.append(plot_pid_response(trace, ulog.data_list, plot_config,
+                plots.append(plot_pid_response(trace, ulog, plot_config,
                                                'Angle').bokeh_plot)
             except Exception as e:
                 print(type(e), axis, ":", e)

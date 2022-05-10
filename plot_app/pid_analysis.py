@@ -346,11 +346,11 @@ class Trace:
         return (average, np.sqrt(variance))
 
 
-def plot_pid_response(trace, data, plot_config, label='Rate'):
+def plot_pid_response(trace, ulog, plot_config, label='Rate'):
     """Plot PID response for one axis
 
     :param trace: Trace object
-    :param data: ULog.data_list
+    :param ulog: ULog
     """
 
     def _color_palette(hue, N=20):
@@ -374,7 +374,7 @@ def plot_pid_response(trace, data, plot_config, label='Rate'):
         return colors
 
 
-    data_plot = DataPlot(data, plot_config, 'sensor_combined',
+    data_plot = DataPlot(ulog, plot_config, 'sensor_combined',
                          y_axis_label='strength', x_axis_label='[s]',
                          title='Step Response for {:} {:}'.format(trace.name.capitalize(), label),
                          x_range=Range1d(0, trace.resplen),

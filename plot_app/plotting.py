@@ -451,7 +451,7 @@ class DataPlot:
     """
 
 
-    def __init__(self, data, config, data_name, x_axis_label=None,
+    def __init__(self, ulog, config, data_name, x_axis_label=None,
                  y_axis_label=None, title=None, plot_height='normal',
                  y_range=None, y_start=None, changed_params=None,
                  topic_instance=0, x_range=None):
@@ -460,7 +460,7 @@ class DataPlot:
         self._previous_success = False
         self._param_change_label = None
 
-        self._data = data
+        self._ulog = ulog
         self._config = config
         self._plot_height_name = plot_height
         self._data_name = data_name
@@ -482,8 +482,7 @@ class DataPlot:
                     plot_parameter_changes(self._p, self.plot_height,
                                            changed_params)
 
-            self._cur_dataset = [elem for elem in data
-                                 if elem.name == data_name and elem.multi_id == topic_instance][0]
+            self._cur_dataset = ulog.get_dataset(data_name)
 
             if y_start is not None:
                 # make sure y axis starts at y_start. We do it by adding an invisible circle
@@ -536,8 +535,7 @@ class DataPlot:
         if not self._had_error: self._previous_success = True
         self._had_error = False
         try:
-            self._cur_dataset = [elem for elem in self._data
-                                 if elem.name == data_name and elem.multi_id == topic_instance][0]
+            self._cur_dataset = self._ulog.get_dataset(data_name, multi_instance=topic_instance)
         except (KeyError, IndexError, ValueError) as error:
             print(type(error), "("+self._data_name+"):", error)
             self._had_error = True
@@ -763,11 +761,11 @@ class DataPlot2D(DataPlot):
     """
 
 
-    def __init__(self, data, config, data_name, x_axis_label=None,
+    def __init__(self, ulog, config, data_name, x_axis_label=None,
                  y_axis_label=None, title=None, plot_height='normal',
                  equal_aspect=True):
 
-        super(DataPlot2D, self).__init__(data, config, data_name,
+        super(DataPlot2D, self).__init__(ulog, config, data_name,
                                          x_axis_label=x_axis_label,
                                          y_axis_label=y_axis_label,
                                          title=title, plot_height=plot_height)
@@ -827,11 +825,11 @@ class DataPlotSpec(DataPlot):
     A spectrogram plot is only added to the plotting page if the sampling frequency of the dataset is higher than 100Hz.
     """
 
-    def __init__(self, data, config, data_name, x_axis_label=None,
+    def __init__(self, ulog, config, data_name, x_axis_label=None,
                  y_axis_label=None, title=None, plot_height='small',
                  x_range=None, y_range=None, topic_instance=0):
 
-        super(DataPlotSpec, self).__init__(data, config, data_name, x_axis_label=x_axis_label,
+        super(DataPlotSpec, self).__init__(ulog, config, data_name, x_axis_label=x_axis_label,
                                            y_axis_label=y_axis_label, title=title, plot_height=plot_height,
                                            x_range=x_range, y_range=y_range, topic_instance=topic_instance)
 
@@ -929,11 +927,11 @@ class DataPlotFFT(DataPlot):
     the dataset is higher than 100Hz.
     """
 
-    def __init__(self, data, config, data_name,
+    def __init__(self, ulog, config, data_name,
                  title=None, plot_height='small',
                  x_range=None, y_range=None, topic_instance=0):
 
-        super(DataPlotFFT, self).__init__(data, config, data_name, x_axis_label='Hz',
+        super(DataPlotFFT, self).__init__(ulog, config, data_name, x_axis_label='Hz',
                                           y_axis_label='Amplitude * 1000', title=title, plot_height=plot_height,
                                           x_range=x_range, y_range=y_range, topic_instance=topic_instance)
         self._use_time_formatter = False
