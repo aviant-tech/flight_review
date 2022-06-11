@@ -75,12 +75,13 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
                 vtol_state_mapping = {2: 2, 1: 3}
                 vehicle_type = cur_dataset.data['vehicle_type']
                 in_transition_mode = cur_dataset.data['in_transition_mode']
+                is_armed = cur_dataset.data['arming_state'] == 2
                 vtol_states = []
                 for i in range(len(vehicle_type)):
                     # a VTOL can change state also w/o in_transition_mode set
                     # (e.g. in Manual mode)
-                    if i == 0 or in_transition_mode[i-1] != in_transition_mode[i] or \
-                        vehicle_type[i-1] != vehicle_type[i]:
+                    if (len(vtol_states) == 0 or in_transition_mode[i-1] != in_transition_mode[i] or \
+                        vehicle_type[i-1] != vehicle_type[i]) and is_armed[i]:
                         vtol_states.append((cur_dataset.data['timestamp'][i],
                                             in_transition_mode[i]))
 
