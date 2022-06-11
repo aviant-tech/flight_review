@@ -357,7 +357,7 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
                             mean_throttle = mean_throttle_fw or np.nan
     
                     flight_time_s = circuit['capacity_mah']*3.6 / mean_current
-                    flight_time_min = current_flight_time_s / 60
+                    flight_time_min = flight_time_s / 60
     
                     table_text_right.append(
                         ('{} / Average Current'.format(circuit['label']), "{:.1f} A".format(mean_current)))
