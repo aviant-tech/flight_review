@@ -326,37 +326,38 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
     except:
         pass
 
-    try:
-        circuits = [
-                {'label': 'Pusher', 'id': 0, 'type': 'FW', 'capacity': 40000},
-                {'label': 'Top', 'id': 1, 'type': 'MC', 'capacity': 6000},
-        ]
-    
-        for circuit in circuits:
-            battery_status = ulog.get_dataset('battery_status', multi_instance=circuit['id'])
+    circuits = [
+            {'label': 'Pusher', 'battery_id': 0, 'actuator_id': 1, 'type': 'FW', 'capacity_mah': 40000},
+            {'label': 'Top', 'battery_id': 1, 'actuator_id': 0, 'type': 'MC', 'capacity_mah': 6000},
+    ]
+
+    for circuit in circuits:
+        try:
+            actuator_controls = ulog.get_dataset('actuator_controls_{}'.format(circuit['actuator_id']))
+            battery_status = ulog.get_dataset('battery_status', multi_instance=circuit['battery_id'])
+            vehicle_status = ulog.get_dataset('vehicle_status')
             battery_current = battery_status.data['current_a']
             if len(battery_current) > 0:
                 max_current = np.amax(battery_current)
                 if max_current > 0.1:
                     if vtol_states is None:
                         mean_current = np.mean(battery_current)
+                        mean_throttle = np.mean(control_throttle)
                     else:
                         mean_current_mc, mean_current_fw = _get_vtol_means_per_mode(
                             vtol_states, battery_status.data['timestamp'], battery_current)
+                        mean_throttle_mc, mean_throttle_fw = _get_vtol_means_per_mode(
+                            vtol_states, actuator_controls.data['timestamp'], actuator_controls.data['control[3]'])
+
                         if circuit['type'] == 'MC':
-                            if mean_current_mc is not None:
-                                mean_current = mean_current_mc
-                            if mean_speed_mc is not None:
-                                mean_speed = mean_speed_mc
+                            mean_current = mean_current_mc or np.nan
+                            mean_throttle = mean_throttle_mc or np.nan
                         elif circuit['type'] == 'FW':
-                            if mean_current_fw is not None:
-                                mean_current = mean_current_fw
-                            if mean_speed_fw is not None:
-                                mean_speed = mean_speed_fw
+                            mean_current = mean_current_fw or np.nan
+                            mean_throttle = mean_throttle_fw or np.nan
     
-                    flight_time_s = circuit['capacity']*3.6 / mean_current
-                    flight_time_min = flight_time_s / 60
-                    max_range = flight_time_s * mean_speed
+                    flight_time_s = circuit['capacity_mah']*3.6 / mean_current
+                    flight_time_min = current_flight_time_s / 60
     
                     table_text_right.append(
                         ('Average {} Current'.format(circuit['label']), "{:.1f} A".format(mean_current)))
@@ -371,9 +372,10 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
             if len(battery_consumed) > 0:
                 total_consumed = battery_consumed[-1]
                 table_text_right.append(
-                    ('Consumed {} '.format(circuit['label']), "{:.1f} mAh".format(total_consumed)))
-    except Exception as error:
-        print(f"Error while handling battery information: {error}")
+                    ('{}: Consumed '.format(circuit['label']), "{:.1f} mAh".format(total_consumed)))
+
+        except Exception as error:
+            print(f"Error while handling battery information of {circuit['type']} circuit: {error}")
 
     # generate the tables
     def generate_html_table(rows_list, tooltip=None, max_width=None):
