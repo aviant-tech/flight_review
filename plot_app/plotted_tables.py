@@ -24,28 +24,25 @@ def _get_vtol_means_per_mode(vtol_states, timestamps, data):
     data vector
     :return: tuple of (mean mc, mean fw)
     """
-    vtol_state_index = 0
-    current_vtol_state = -1
-    sum_mc = 0
-    counter_mc = 0
-    sum_fw = 0
-    counter_fw = 0
-    for i in range(len(timestamps)):
-        if timestamps[i] > vtol_states[vtol_state_index][0]:
-            current_vtol_state = vtol_states[vtol_state_index][1]
-            vtol_state_index += 1
-        if current_vtol_state == 2: # FW
-            sum_fw += data[i]
-            counter_fw += 1
-        elif current_vtol_state == 3: # MC
-            sum_mc += data[i]
-            counter_mc += 1
-    mean_mc = None
-    if counter_mc > 0: mean_mc = sum_mc / counter_mc
-    mean_fw = None
-    if counter_fw > 0: mean_fw = sum_fw / counter_fw
-    return (mean_mc, mean_fw)
+    delta_times = np.diff(timestamps, append=timestamps[-1])
 
+    vtol_state_interp = np.zeros_like(timestamps)
+    for state_change_timestamp, new_state in vtol_states:
+        vtol_state_interp[timestamps >= state_change_timestamp] = new_state
+    fw_idxs = vtol_state_interp == 2
+    mc_idxs = vtol_state_interp == 3
+
+    if any(mc_idxs):
+        mean_mc = np.average(data[mc_idxs], weights=delta_times[mc_idxs])
+    else:
+        mean_mc = None
+
+    if any(fw_idxs):
+        mean_fw = np.average(data[fw_idxs], weights=delta_times[fw_idxs])
+    else:
+        mean_fw = None
+
+    return (mean_mc, mean_fw)
 
 def get_heading_html(ulog, px4_ulog, db_data, link_to_3d_page,
                      additional_links=None, title_suffix=''):
