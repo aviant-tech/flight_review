@@ -360,19 +360,19 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
                     flight_time_min = current_flight_time_s / 60
     
                     table_text_right.append(
-                        ('Average {} Current'.format(circuit['label']), "{:.1f} A".format(mean_current)))
+                        ('{} / Average Current'.format(circuit['label']), "{:.1f} A".format(mean_current)))
                     table_text_right.append(
-                        ('Max {} Current'.format(circuit['label']), "{:.1f} A".format(max_current)))
+                        ('{} / Average Throttle'.format(circuit['label']), '{:.1f} %'.format(mean_throttle*100)))
                     table_text_right.append(
-                        ('Max {} Flight Time'.format(circuit['label']), "{:.1f} min".format(flight_time_min)))
+                        ('{} / Max Current Endurance'.format(circuit['label']), "{:.1f} min".format(flight_time_min)))
                     table_text_right.append(
-                        ('Max {} Flight Distance'.format(circuit['label']), "{:.1f} km".format(max_range/1000)))
+                        ('{} / Max Current'.format(circuit['label']), "{:.1f} A".format(max_current)))
     
             battery_consumed = battery_status.data['discharged_mah']
             if len(battery_consumed) > 0:
                 total_consumed = battery_consumed[-1]
                 table_text_right.append(
-                    ('{}: Consumed '.format(circuit['label']), "{:.1f} mAh".format(total_consumed)))
+                    ('{} / Consumed '.format(circuit['label']), "{:.1f} mAh".format(total_consumed)))
 
         except Exception as error:
             print(f"Error while handling battery information of {circuit['type']} circuit: {error}")
