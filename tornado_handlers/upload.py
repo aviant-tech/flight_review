@@ -205,24 +205,30 @@ class UploadHandler(TornadoRequestHandlerBase):
                 # Load the ulog file but only if not uploaded via CI.
                 # Then we open the DB connection.
                 ulog = None
+                dbulog_pk = None
                 if source != 'CI':
                     ulog_file_name = get_log_filename(log_id)
+                    print(f'Loading file {ulog_file_name}')
                     ulog = load_ulog_file(ulog_file_name)
+
                     db_handle = DatabaseULog.get_db_handle(get_db_filename())
+                    print('Generating DatabaseULog.')
                     dbulog = DatabaseULog(db_handle, ulog=ulog)
+                    print('Saving DatabaseULog to database.')
                     dbulog.save()
+                    dbulog_pk = dbulog.primary_key
 
 
                 # put additional data into a DB
                 con = sqlite3.connect(get_db_filename())
                 cur = con.cursor()
                 cur.execute(
-                    'insert into Logs (Id, Title, Description, '
+                    'insert into Logs (Id, ULogId, Title, Description, '
                     'OriginalFilename, Date, AllowForAnalysis, Obfuscated, '
                     'Source, Email, WindSpeed, Rating, Feedback, Type, '
                     'videoUrl, ErrorLabels, Public, Token) values '
-                    '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [log_id, title, description, upload_file_name,
+                    '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [log_id, dbulog_pk, title, description, upload_file_name,
                      datetime.datetime.now(), allow_for_analysis,
                      obfuscated, source, stored_email, wind_speed, rating,
                      feedback, upload_type, video_url, error_labels, is_public, token])
