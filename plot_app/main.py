@@ -113,7 +113,9 @@ else:
             with db_handle() as db:
                 cur = db.cursor()
                 cur.execute('select ULogId from Logs where Id = ?', [log_id])
-                dbulog_pk, = cur.fetchone()
+                row = cur.fetchone()
+                if row is not None:
+                    dbulog_pk = row[0]
 
             if dbulog_pk is None:
                 raise KeyError(f'Found Log object of {log_id=} with ULogId set')
