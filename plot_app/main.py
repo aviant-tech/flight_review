@@ -99,32 +99,33 @@ else:
     log_id = ''
 
     try:
-        if GET_arguments is not None and 'log' in GET_arguments:
-            log_args = GET_arguments['log']
-            if len(log_args) == 1:
-                log_id = str(log_args[0], 'utf-8')
-                if not validate_log_id(log_id):
-                    raise ValueError('Invalid log id: {}'.format(log_id))
-                print('GET[log]={}'.format(log_id))
-                ulog_file_name = get_log_filename(log_id)
+        try:
+            if GET_arguments is not None and 'log' in GET_arguments:
+                log_args = GET_arguments['log']
+                if len(log_args) == 1:
+                    log_id = str(log_args[0], 'utf-8')
+                    if not validate_log_id(log_id):
+                        raise ValueError('Invalid log id: {}'.format(log_id))
+                    print('GET[log]={}'.format(log_id))
+                    ulog_file_name = get_log_filename(log_id)
 
-            db_handle = DatabaseULog.get_db_handle(get_db_filename())
-            dbulog_pk = None
-            with db_handle() as db:
-                cur = db.cursor()
-                cur.execute('select ULogId from Logs where Id = ?', [log_id])
-                row = cur.fetchone()
-                if row is not None:
-                    dbulog_pk = row[0]
+                db_handle = DatabaseULog.get_db_handle(get_db_filename())
+                dbulog_pk = None
+                with db_handle() as db:
+                    cur = db.cursor()
+                    cur.execute('select ULogId from Logs where Id = ?', [log_id])
+                    row = cur.fetchone()
+                    if row is not None:
+                        dbulog_pk = row[0]
 
-            if dbulog_pk is None:
-                raise KeyError(f'Found Log object of {log_id=} with ULogId set')
-            else:
-                ulog = DatabaseULog(db_handle, primary_key=dbulog_pk)
-                print(f'Found ULog with {dbulog_pk=} in database.')
-    except KeyError:
-        ulog = load_ulog_file(ulog_file_name)
-        print(f'Loading ULog {log_id} from file')
+                if dbulog_pk is None:
+                    raise KeyError(f'Found no Log object of {log_id=} with ULogId set')
+                else:
+                    ulog = DatabaseULog(db_handle, primary_key=dbulog_pk)
+                    print(f'Found ULog with {dbulog_pk=} in database.')
+        except KeyError:
+            ulog = load_ulog_file(ulog_file_name)
+            print(f'Loading ULog {log_id} from file')
     except ULogException:
         error_message = ('A parsing error occured when trying to read the file - '
                          'the log is most likely corrupt.')
