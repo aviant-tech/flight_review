@@ -1,9 +1,10 @@
 bokeh==2.1.1
-jinja2
+jinja2==2.11.3
+markupsafe==2.0.1
 jupyter
 pyfftw
 pylint
-pyulog
+git+https://github.com/hermankolden/pyulog@ce82d3f#egg=pyulog
 requests
 scipy==1.7.1
 simplekml
