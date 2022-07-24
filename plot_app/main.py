@@ -16,6 +16,7 @@ from helper import ( # pylint: disable=import-error
     get_log_filename,
     flight_modes_table,
     vtol_modes_table,
+    load_ulog,
 )
 from config import get_db_filename, get_mapbox_api_access_token # pylint: disable=import-error
 from colors import HTML_color_to_RGB # pylint: disable=import-error
@@ -54,51 +55,7 @@ if not validate_log_id(log_id):
         reason=f'Invalid log id: {log_id}'
     )
 print(f'Loading log with {log_id=}')
-
-db_handle = DatabaseULog.get_db_handle(get_db_filename())
-found_log = False
-dbulog_pk = None
-with db_handle() as db:
-    cur = db.cursor()
-    cur.execute('SELECT ULogId FROM Logs WHERE Id = ?', [log_id])
-    row = cur.fetchone()
-    if row is None:
-        print(f'Did not find any Logs row in database with {log_id=}')
-    else:
-        found_log = True
-        dbulog_pk = row[0]
-        if dbulog_pk is None:
-            print(f'Found a Logs row in database with {log_id=}, but the ULogId was None')
-
-if dbulog_pk is not None and DatabaseULog.exists_in_db(db_handle, dbulog_pk):
-    print(f'Found Logs row with Id={log_id} and ULogId={dbulog_pk} which points to a ULog row')
-    ulog = DatabaseULog(db_handle, primary_key=dbulog_pk)
-else:
-    print(f'Found no Log object of Id={log_id} with ULogId set, so loading from file instead.')
-    try:
-        ulog_filename = get_log_filename(log_id)
-        ulog = ULog(ulog_filename)
-    except FileNotFoundError:
-        raise tornado.web.HTTPError(
-            status_code=404,
-            reason=f'Failed to open file with {ulog_filename=}'
-        )
-    except Exception:
-        raise tornado.web.HTTPError(
-            status_code=401,
-            reason=f'Got an error while reading {ulog_filename=} from file'
-        )
-    dbulog = DatabaseULog(db_handle, ulog=ulog)
-    print('Saving to db.')
-    dbulog.save()
-    if found_log and dbulog_pk is None:
-        with db_handle() as db:
-            cur = db.cursor()
-            cur.execute(
-                'UPDATE Logs SET ULogId=? WHERE Id=?'
-            , [dbulog.primary_key, log_id])
-
-    print('Done')
+ulog = load_ulog(log_id)
 
 print('Retrieving PX4 specific data.')
 px4_ulog = PX4ULog(ulog)

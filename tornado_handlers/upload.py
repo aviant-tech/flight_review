@@ -24,7 +24,7 @@ from db_entry import DBVehicleData, DBData
 from config import get_db_filename, get_http_protocol, get_domain_name, \
     email_notifications_config
 from helper import get_total_flight_time, validate_url, get_log_filename, \
-    load_ulog_file, get_airframe_name, ULogException
+    load_ulog, get_airframe_name, ULogException
 from overview_generator import generate_overview_img_from_id
 
 #pylint: disable=relative-beyond-top-level
@@ -207,17 +207,15 @@ class UploadHandler(TornadoRequestHandlerBase):
                 ulog = None
                 dbulog_pk = None
                 if source != 'CI':
-                    ulog_file_name = get_log_filename(log_id)
-                    print(f'Loading file {ulog_file_name}')
-                    ulog = load_ulog_file(ulog_file_name)
+                    filename = get_log_filename(log_id)
+                    print(f'Loading log with {filename=}')
+                    ulog = ULog(filename)
 
                     db_handle = DatabaseULog.get_db_handle(get_db_filename())
-                    print('Generating DatabaseULog.')
-                    dbulog = DatabaseULog(db_handle, ulog=ulog)
                     print('Saving DatabaseULog to database.')
+                    dbulog = DatabaseULog(db_handle, ulog=ulog)
                     dbulog.save()
                     dbulog_pk = dbulog.primary_key
-
 
                 # put additional data into a DB
                 con = sqlite3.connect(get_db_filename())

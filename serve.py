@@ -27,7 +27,7 @@ from tornado_handlers.three_d import ThreeDHandler
 from tornado_handlers.radio_controller import RadioControllerHandler
 from tornado_handlers.error_labels import UpdateErrorLabelHandler
 
-from helper import set_log_id_is_filename, print_cache_info
+from helper import set_log_id_is_filename
 from config import debug_print_timing, get_overview_img_filepath
 
 #pylint: disable=invalid-name
@@ -153,14 +153,6 @@ if args.show:
         else:
             server.show('/upload')
     server.io_loop.add_callback(show_callback)
-
-
-if debug_print_timing():
-    def print_statistics():
-        """ print ulog cache info once per hour """
-        print_cache_info()
-        server.io_loop.call_later(60*60, print_statistics)
-    server.io_loop.call_later(60, print_statistics)
 
 # run_until_shutdown has been added 0.12.4 and is the preferred start method
 run_op = getattr(server, "run_until_shutdown", None)

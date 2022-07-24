@@ -16,7 +16,7 @@ from pyulog.ulog2kml import convert_ulog2kml
 # this is needed for the following imports
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../plot_app'))
 from helper import get_log_filename, validate_log_id, \
-    flight_modes_table, load_ulog_file, get_default_parameters
+    flight_modes_table, get_default_parameters, load_ulog
 
 from config import get_db_filename, get_kml_filepath
 
@@ -62,7 +62,7 @@ class DownloadHandler(TornadoRequestHandlerBase):
 
 
         if download_type == '1': # download the parameters
-            ulog = load_ulog_file(log_file_name)
+            ulog = load_ulog(log_id)
             param_keys = sorted(ulog.initial_parameters.keys())
 
             self.set_header("Content-Type", "text/plain")
@@ -127,7 +127,7 @@ class DownloadHandler(TornadoRequestHandlerBase):
                 self.finish()
 
         elif download_type == '3': # download the non-default parameters
-            ulog = load_ulog_file(log_file_name)
+            ulog = load_ulog(log_id)
             param_keys = sorted(ulog.initial_parameters.keys())
 
             self.set_header("Content-Type", "text/plain")

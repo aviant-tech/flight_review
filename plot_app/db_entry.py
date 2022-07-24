@@ -5,7 +5,7 @@ from html import escape
 from pyulog import *
 from pyulog.px4 import *
 
-from helper import get_log_filename, load_ulog_file
+from helper import get_log_filename, load_ulog
 
 #pylint: disable=missing-docstring, too-few-public-methods
 
@@ -85,8 +85,7 @@ class DBDataGenerated:
         """ initialize from a log file """
         obj = cls()
 
-        ulog_file_name = get_log_filename(log_id)
-        ulog = load_ulog_file(ulog_file_name)
+        ulog = load_ulog(log_id)
         px4_ulog = PX4ULog(ulog)
 
         # extract information

@@ -2,6 +2,7 @@
 import json
 from timeit import default_timer as timer
 import time
+import tornado
 import re
 import os
 import traceback
@@ -14,13 +15,14 @@ import uuid
 import numpy as np
 
 from pyulog import *
+from pyulog.db import DatabaseULog
 from pyulog.px4 import *
 
 from config_tables import *
 from config import get_log_filepath, get_airframes_filename, get_airframes_url, \
                    get_parameters_filename, get_parameters_url, \
                    get_log_cache_size, debug_print_timing, \
-                   get_releases_filename
+                   get_releases_filename, get_db_filename
 
 #pylint: disable=line-too-long, global-variable-not-assigned,invalid-name,global-statement
 
@@ -284,53 +286,44 @@ class ULogException(Exception):
     """
     pass
 
-@lru_cache(maxsize=get_log_cache_size())
-def load_ulog_file(file_name):
-    """ load an ULog file
-    :return: ULog object
+def load_ulog(log_id):
     """
-    # The reason to put this method into helper is that the main module gets
-    # (re)loaded on each page request. Thus the caching would not work there.
+    Loads a ULog with Id log_id. First we check if there is a Logs row in the
+    database with Id=log_id and some ULogId. If yes, we return a DatabaseULog
+    object loaded from the ULog row. If no, we look for a file in the log_files
+    directory named <log_id>.ulg and try to load that instead.
+    """
+    db_handle = DatabaseULog.get_db_handle(get_db_filename())
+    dbulog_pk = None
+    with db_handle() as db:
+        cur = db.cursor()
+        cur.execute('SELECT ULogId FROM Logs WHERE Id = ?', [log_id])
+        row = cur.fetchone()
+        if row is None:
+            print(f'Did not find any Logs row in database with {log_id=}')
+        else:
+            dbulog_pk = row[0]
+            if dbulog_pk is None:
+                print(f'Found a Logs row in database with {log_id=}, but the ULogId was None')
 
-    # load only the messages we really need
-    msg_filter = ['battery_status', 'distance_sensor', 'estimator_status',
-                  'sensor_combined', 'cpuload',
-                  'vehicle_gps_position', 'vehicle_local_position',
-                  'vehicle_local_position_setpoint',
-                  'vehicle_global_position', 'actuator_controls_0',
-                  'actuator_controls_1', 'actuator_outputs',
-                  'vehicle_angular_velocity', 'vehicle_attitude', 'vehicle_attitude_setpoint',
-                  'vehicle_rates_setpoint', 'rc_channels', 'input_rc',
-                  'position_setpoint_triplet', 'vehicle_attitude_groundtruth',
-                  'vehicle_local_position_groundtruth', 'vehicle_visual_odometry',
-                  'vehicle_status', 'airspeed', 'airspeed_validated', 'manual_control_setpoint',
-                  'rate_ctrl_status', 'vehicle_air_data',
-                  'vehicle_magnetometer', 'system_power', 'tecs_status', 'telemetry_status',
-                  'sensor_baro', 'sensor_accel', 'sensor_accel_fifo',
-                  'sensor_gyro_fifo', 'vehicle_angular_acceleration',
-                  'ekf2_timestamps', 'manual_control_switches',
-                  'position_controller_status', 'navigator_mission_item']
-    try:
-        ulog = ULog(file_name, msg_filter, disable_str_exceptions=False)
-    except FileNotFoundError:
-        print("Error: file %s not found" % file_name)
-        raise
-
-    # catch all other exceptions and turn them into an ULogException
-    except Exception as error:
-        traceback.print_exception(*sys.exc_info())
-        raise ULogException()
-
-    # filter messages with timestamp = 0 (these are invalid).
-    # The better way is not to publish such messages in the first place, and fix
-    # the code instead (it goes against the monotonicity requirement of ulog).
-    # So we display the values such that the problem becomes visible.
-#    for d in ulog.data_list:
-#        t = d.data['timestamp']
-#        non_zero_indices = t != 0
-#        if not np.all(non_zero_indices):
-#            d.data = np.compress(non_zero_indices, d.data, axis=0)
-
+    if dbulog_pk is not None and DatabaseULog.exists_in_db(db_handle, dbulog_pk):
+        print(f'Loading log with with Id={log_id} and ULogId={dbulog_pk} from database')
+        ulog = DatabaseULog(db_handle, primary_key=dbulog_pk)
+    else:
+        ulog_filename = get_log_filename(log_id)
+        print(f'Found no Log object of Id={log_id} with ULogId set, so loading from {ulog_filename} instead.')
+        try:
+            ulog = ULog(ulog_filename)
+        except FileNotFoundError:
+            raise tornado.web.HTTPError(
+                status_code=404,
+                reason=f'Failed to open file with {ulog_filename=}'
+            )
+        except Exception:
+            raise tornado.web.HTTPError(
+                status_code=401,
+                reason=f'Got an error while reading {ulog_filename=} from file'
+            )
     return ulog
 
 def get_airframe_name(ulog, multi_line=False):
@@ -388,14 +381,6 @@ def get_flight_mode_changes(ulog):
     except (KeyError, IndexError) as error:
         flight_mode_changes = []
     return flight_mode_changes
-
-def print_cache_info():
-    """ print information about the ulog cache """
-    print(load_ulog_file.cache_info())
-
-def clear_ulog_cache():
-    """ clear/invalidate the ulog cache """
-    load_ulog_file.cache_clear()
 
 def validate_error_ids(err_ids):
     """
