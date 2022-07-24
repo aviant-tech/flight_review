@@ -4,7 +4,7 @@ markupsafe==2.0.1
 jupyter
 pyfftw
 pylint
-git+https://github.com/hermankolden/pyulog@ce82d3f#egg=pyulog
+git+https://github.com/hermankolden/pyulog@0d03729#egg=pyulog
 requests
 scipy==1.7.1
 simplekml
