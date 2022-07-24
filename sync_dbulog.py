@@ -23,6 +23,9 @@ parser.add_argument('--unregister',
 parser.add_argument('--register',
                     action='store_true',
                     help='Register and generate log files with no corresponding Logs row')
+parser.add_argument('--generate',
+                    action='store_true',
+                    help='Generate DatabaseULog entries for Logs rows with no ULogId')
 args = parser.parse_args()
 
 if args.verbose:
@@ -50,6 +53,7 @@ with db_handle() as db:
             continue
 
 dbulog_pks_in_db = set()
+orphan_dbulog_pks = set()
 with db_handle() as db:
     cur = db.cursor()
     cur.execute('SELECT Id FROM ULog', [])
@@ -60,6 +64,7 @@ with db_handle() as db:
     for dbulog_pk in dbulog_pks_in_db:
         cur.execute('SELECT Id FROM Logs WHERE ULogId=?', [dbulog_pk])
         if cur.fetchone() is None:
+            orphan_dbulog_pks.add(dbulog_pk)
             logging.warning('ULog with Id %d has no corresponding Logs row', dbulog_pk)
 
 log_ids_in_files = set()
@@ -73,24 +78,47 @@ for filename in os.listdir(log_dir_path):
     else:
         logging.debug('Invalid file in log directory %s: %s', log_dir_path, filename)
 
-unregistered_log_ids = log_ids_in_files - log_ids_in_db
+unregistered_log_file_ids = log_ids_in_files.difference(log_ids_in_db)
+ungenerated_log_file_ids = log_ids_in_files.intersection(log_ids_in_db).difference(log_ids_with_dbulog)
 no_data_log_ids = log_ids_in_db.difference(log_ids_in_files).difference(log_ids_with_dbulog)
 
-for log_id in unregistered_log_ids:
+for log_id in unregistered_log_file_ids:
     logging.debug('Log file %s.ulg has no corresponding Logs entry.', log_id)
+for log_id in ungenerated_log_file_ids:
+    logging.debug('Log row with Id=%s has no corresponding ULogId.', log_id)
 for log_id in no_data_log_ids:
-    logging.debug('Log row with Id=%s has no corresponding data.', log_id)
+    logging.debug('Log row with Id=%s has no corresponding file or ULogId.', log_id)
 
-logging.info('Files in log directory: %d', len(log_ids_in_files))
-logging.info('Logs in database: %d', len(log_ids_in_db))
-logging.info('ULogs in database: %d', len(dbulog_pks_in_db))
-logging.info('Logs to register: %d', len(unregistered_log_ids))
+logging.info('Files in log directory: %d (including %d unregistered)', len(log_ids_in_files), len(unregistered_log_file_ids))
+logging.info('Logs in database: %d (including %d ungenerated)', len(log_ids_in_db), len(ungenerated_log_file_ids))
+logging.info('ULogs in database: %d (including %d orphans)', len(dbulog_pks_in_db), len(orphan_dbulog_pks))
 logging.info('Logs to unregister: %d', len(no_data_log_ids))
+logging.info('Logs to register: %d', len(unregistered_log_file_ids))
+logging.info('ULogs to generate: %d', len(ungenerated_log_file_ids))
+
+
+if args.unregister:
+    for i, log_id in enumerate(no_data_log_ids, start=1):
+        assert log_id in log_ids_in_db
+        assert log_id not in log_ids_in_files
+        assert log_id not in log_ids_with_dbulog
+        logging.info('(%d/%d) Unregistering Logs row with Id=%s',
+                      i, len(no_data_log_ids), log_id)
+        with db_handle() as db:
+            cur = db.cursor()
+            cur.execute('''
+                DELETE FROM Logs
+                WHERE Id=?
+            ''', [log_id])
+            cur.close()
 
 if args.register:
-    for i, log_id in enumerate(unregistered_log_ids, start=1):
+    for i, log_id in enumerate(unregistered_log_file_ids, start=1):
+        assert log_id in log_ids_in_files
+        assert log_id not in log_ids_in_db
+        assert log_id not in log_ids_with_dbulog
         logging.info('(%d/%d) Registering Logs row with Id=%s',
-                      i, len(unregistered_log_ids), log_id)
+                      i, len(unregistered_log_file_ids), log_id)
         filename = os.path.join(log_dir_path, f'{log_id}.ulg')
         ulog = ULog(filename)
         dbulog = DatabaseULog(db_handle, ulog=ulog)
@@ -104,15 +132,23 @@ if args.register:
             ''', [log_id, dbulog.primary_key])
             cur.close()
 
-if args.unregister:
-    for i, log_id in enumerate(no_data_log_ids, start=1):
-        logging.info('(%d/%d) Unregistering Logs row with Id=%s',
-                      i, len(no_data_log_ids), log_id)
+if args.generate:
+    for i, log_id in enumerate(ungenerated_log_file_ids, start=1):
+        assert log_id in log_ids_in_files
+        assert log_id in log_ids_in_db
+        assert log_id not in log_ids_with_dbulog
+        logging.info('(%d/%d) Generating ULog row for Logs row with Id=%s',
+                      i, len(ungenerated_log_file_ids), log_id)
+        filename = os.path.join(log_dir_path, f'{log_id}.ulg')
+        ulog = ULog(filename)
+        dbulog = DatabaseULog(db_handle, ulog=ulog)
+        dbulog.save()
+
         with db_handle() as db:
             cur = db.cursor()
             cur.execute('''
-                DELETE FROM Logs
+                UPDATE Logs
+                SET ULogId=?
                 WHERE Id=?
-            ''', [log_id])
+            ''', [dbulog.primary_key, log_id])
             cur.close()
-
