@@ -22,7 +22,7 @@ import pyfftw
 
 from downsampling import DynamicDownsample
 from helper import (
-    map_projection, WGS84_to_mercator, flight_modes_table, vtol_modes_table
+    map_projection, WGS84_to_mercator, flight_modes_table, vtol_modes_table, tecs_modes_table
     )
 
 
@@ -122,6 +122,90 @@ def plot_parameter_changes(p, plots_height, changed_parameters):
         return labels
     return None
 
+def plot_tecs_modes_background(data_plot, tecs_mode_changes, vtol_states=None):
+    """ plot flight modes as filling background (with different colors) to a
+    DataPlot object """
+    vtol_state_height = 40
+    added_box_annotation_args = {}
+    p = data_plot.bokeh_plot
+    if vtol_states is not None:
+        added_box_annotation_args['bottom'] = vtol_state_height
+        added_box_annotation_args['bottom_units'] = 'screen'
+    labels_y_pos = []
+    labels_x_pos = []
+    labels_text = []
+    labels_color = []
+    labels_y_offset = data_plot.plot_height - 60
+    if data_plot.has_param_change_labels:
+        # make sure there's no overlap with changed parameter labels
+        labels_y_offset -= 10 + 4 * 10
+
+    for i in range(len(tecs_mode_changes)-1):
+        t_start, mode = tecs_mode_changes[i]
+        t_end, mode_next = tecs_mode_changes[i + 1]
+        if mode in tecs_modes_table:
+            mode_name, color = tecs_modes_table[mode]
+            annotation = BoxAnnotation(left=int(t_start), right=int(t_end),
+                                       fill_alpha=0.09, line_color=None,
+                                       fill_color=color,
+                                       **added_box_annotation_args)
+            p.add_layout(annotation)
+
+            if tecs_mode_changes[i+1][0] - t_start > 1e6: # filter fast
+                                                 # switches to avoid overlap
+                labels_text.append(mode_name)
+                labels_x_pos.append(t_start)
+                labels_y_pos.append(labels_y_offset)
+                labels_color.append(color)
+
+
+    # plot flight mode names as labels
+    # they're only visible when the mouse is over the plot
+    if len(labels_text) > 0:
+        source = ColumnDataSource(data=dict(x=labels_x_pos, text=labels_text,
+                                            y=labels_y_pos, textcolor=labels_color))
+        labels = LabelSet(x='x', y='y', text='text',
+                          y_units='screen', level='underlay',
+                          source=source, render_mode='canvas',
+                          text_font_size='10pt',
+                          text_color='textcolor', text_alpha=0.85,
+                          background_fill_color='white',
+                          background_fill_alpha=0.8, angle=90/180*np.pi,
+                          text_align='right', text_baseline='top')
+        labels.visible = False # initially hidden
+        p.add_layout(labels)
+
+        # callback doc: https://bokeh.pydata.org/en/latest/docs/user_guide/interaction/callbacks.html
+        code = """
+        labels.visible = cb_obj.event_name == "mouseenter";
+        """
+        callback = CustomJS(args=dict(labels=labels), code=code)
+        p.js_on_event(events.MouseEnter, callback)
+        p.js_on_event(events.MouseLeave, callback)
+
+
+    if vtol_states is not None:
+        for i in range(len(vtol_states)-1):
+            t_start, mode = vtol_states[i]
+            t_end, mode_next = vtol_states[i + 1]
+            if mode in vtol_modes_table:
+                mode_name, color = vtol_modes_table[mode]
+                p.add_layout(BoxAnnotation(left=int(t_start), right=int(t_end),
+                                           fill_alpha=0.09, line_color=None,
+                                           fill_color=color,
+                                           top=vtol_state_height, top_units='screen'))
+        # use screen coords so that the label always stays. It's a bit
+        # unfortunate that the x position includes the x-offset of the y-axis,
+        # which depends on the axis labels (e.g. 4.000e+5 creates a large offset)
+        label = Label(x=60, y=12, x_units='screen', y_units='screen',
+                      text='VTOL mode', text_font_size='10pt', level='glyph',
+                      background_fill_color='white', background_fill_alpha=0.8)
+        p.add_layout(label)
+
+        split_line = Span(location=vtol_state_height, location_units='screen',
+                        dimension='width', line_color='black',
+                        line_width=1, line_alpha=0.5)
+        p.add_layout(split_line)
 
 def plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states=None):
     """ plot flight modes as filling background (with different colors) to a

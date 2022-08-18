@@ -74,6 +74,9 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     # initialize flight mode changes
     flight_mode_changes = get_flight_mode_changes(ulog)
 
+    # initialize tecs mode changes
+    tecs_mode_changes = get_tecs_mode_changes(ulog)
+
     # VTOL state changes & vehicle type
     vtol_states = None
     is_vtol = False
@@ -160,6 +163,17 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         vertical_acceptance.append((ulog.last_timestamp, False))
     except (KeyError, IndexError) as error:
         vertical_acceptance = None
+
+    # TECS performance
+
+    EAS2TAS = ulog.get_dataset("tecs_status").data["true_airspeed_sp"] / ulog.get_dataset("tecs_status").data["equivalent_airspeed_sp"]
+    # From TECS::_detect_underspeed()
+    TAS_min = ulog.initial_parameters["FW_AIRSPD_MIN"] * EAS2TAS
+    tas_state_criticalness = TAS_min * 0.9 - ulog.get_dataset("tecs_status").data["true_airspeed_filtered"]
+    throttle_state_criticalness = ulog.get_dataset("tecs_status").data["throttle_sp"] - ulog.initial_parameters["FW_THR_MAX"] * 0.95
+    # From TECS:_detect_uncommanded_descent()
+    ste_error_criticalness = ulog.get_dataset("tecs_status").data["total_energy_error"] - 200
+
 
     # Heading
     curdoc().template_variables['title_html'] = get_heading_html(
@@ -520,12 +534,25 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
     # TECS (fixed-wing or VTOLs)
     data_plot = DataPlot(ulog, plot_config, 'tecs_status', y_start=0, title='TECS',
-                         y_axis_label='[m/s]', plot_height='small',
+                         y_axis_label='', plot_height='small',
                          changed_params=changed_params, x_range=x_range)
-    data_plot.add_graph(['height_rate', 'height_rate_setpoint'],
-                        colors2, ['Height Rate', 'Height Rate Setpoint'],
-                        mark_nan=True)
-    plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
+    data_plot.add_graph([
+            lambda data: ('Total energy rate', data['total_energy_rate']),
+            lambda data: ('Total energy criticalness', ste_error_criticalness),
+            lambda data: ('Airspeed criticalness', tas_state_criticalness),
+            lambda data: ('Throttle criticalness scaled', throttle_state_criticalness * 10)
+        ],
+        colors8[:4],
+        [
+            'Total energy rate',
+            'Total energy criticalness',
+            'Airspeed criticalness',
+            'Throttle criticalness scaled'
+            ],
+        mark_nan=True
+        )
+
+    plot_tecs_modes_background(data_plot, tecs_mode_changes, vtol_states)
     if data_plot.finalize() is not None: plots.append(data_plot)
 
 

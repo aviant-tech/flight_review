@@ -368,6 +368,20 @@ def get_total_flight_time(ulog):
         return flight_time_s
     return None
 
+def get_tecs_mode_changes(ulog):
+    """
+    get a list of tecs mode changes
+    :return: list of (timestamp, int mode) tuples, the last is the last log
+    timestamp and mode = -1.
+    """
+    try:
+        cur_dataset = ulog.get_dataset('tecs_status')
+        tecs_mode_changes = cur_dataset.list_value_changes('mode')
+        tecs_mode_changes.append((ulog.last_timestamp, -1))
+    except (KeyError, IndexError) as error:
+        tecs_mode_changes = []
+    return tecs_mode_changes
+
 def get_flight_mode_changes(ulog):
     """
     get a list of flight mode changes

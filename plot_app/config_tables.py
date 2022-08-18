@@ -1,6 +1,12 @@
 """ configuration tables """
 
 #pylint: disable=invalid-name
+tecs_modes_table = {
+    0: ('NORMAL', '#00cc33'), # green
+    1: ('UNDERSPEED', '#cc0000'), # red
+    2: ('BAD_DESCENT', '#cc0000'), # red
+    3: ('CLIMBOUT', '#cc0000'), # red
+}
 
 flight_modes_table = {
     0: ('Manual', '#cc0000'), # red
