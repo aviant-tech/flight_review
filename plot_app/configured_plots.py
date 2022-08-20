@@ -164,16 +164,6 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     except (KeyError, IndexError) as error:
         vertical_acceptance = None
 
-    # TECS performance
-
-    EAS2TAS = ulog.get_dataset("tecs_status").data["true_airspeed_sp"] / ulog.get_dataset("tecs_status").data["equivalent_airspeed_sp"]
-    # From TECS::_detect_underspeed()
-    TAS_min = ulog.initial_parameters["FW_AIRSPD_MIN"] * EAS2TAS
-    tas_state_criticalness = TAS_min * 0.9 - ulog.get_dataset("tecs_status").data["true_airspeed_filtered"]
-    throttle_state_criticalness = ulog.get_dataset("tecs_status").data["throttle_sp"] - ulog.initial_parameters["FW_THR_MAX"] * 0.95
-    # From TECS:_detect_uncommanded_descent()
-    ste_error_criticalness = ulog.get_dataset("tecs_status").data["total_energy_error"] - 200
-
 
     # Heading
     curdoc().template_variables['title_html'] = get_heading_html(
@@ -544,8 +534,8 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     gs_timestamps = data_plot.dataset.data['timestamp']
     gs_values = np.interp(tas_timestamps, gs_timestamps, data_plot.dataset.data['vel_m_s'])
 
-    tas_values_fw = []
-    gs_values_fw = []
+    tas_values_fw = np.array([])
+    gs_values_fw = np.array([])
     vtol_state_changes = zip(vtol_states[:-1], vtol_states[1:])
     for (change_timestamp, mode), (next_change_timestamp, _) in vtol_state_changes:
         # Mode 2 is fixed-wing
@@ -555,49 +545,61 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         tas_values_fw = np.append(tas_values_fw, tas_values[fw_indexes])
         gs_values_fw = np.append(gs_values_fw, gs_values[fw_indexes])
 
-    mean_gs = np.average(gs_values_fw)
-    mean_tas = np.average(tas_values_fw)
-    airspeed_correction_factor = mean_gs/mean_tas
-    wind_values_fw = gs_values_fw - tas_values_fw
-    mean_wind = np.average(wind_values_fw)
+    if gs_values_fw.shape[0] > 0 and tas_values_fw.shape[0] > 0:
+        mean_gs = np.average(gs_values_fw)
+        mean_tas = np.average(tas_values_fw)
+        airspeed_correction_factor = mean_gs/mean_tas
+        wind_values_fw = gs_values_fw - tas_values_fw
+        mean_wind = np.average(wind_values_fw)
 
-    p = data_plot.bokeh_plot
-    p.circle(tas_values_fw,
-             wind_values_fw,
-             color=colors8[0],
-             size=1,
-             legend_label='Measurements (suggested ASPD_SCALE: {sign:s}{pct:d}% = {scale:.2f})'.format(
-                sign="+" if airspeed_correction_factor >= 1 else "-",
-                pct=abs(int(airspeed_correction_factor*100)-100),
-                scale=ulog.initial_parameters['ASPD_SCALE'] * airspeed_correction_factor,
-            ))
-    p.line([min(tas_values_fw), max(tas_values_fw)],
-           [mean_wind, mean_wind],
-           legend_label=f'Mean apparent wind = {mean_wind:.1f} m/s')
+        p = data_plot.bokeh_plot
+        p.circle(tas_values_fw,
+                 wind_values_fw,
+                 color=colors8[0],
+                 size=1,
+                 legend_label='Measurements (suggested ASPD_SCALE: {sign:s}{pct:.1f}% = {scale:.2f})'.format(
+                    sign="+" if airspeed_correction_factor >= 1 else "-",
+                    pct=np.abs(airspeed_correction_factor*100-100),
+                    scale=ulog.initial_parameters['ASPD_SCALE'] * airspeed_correction_factor,
+                ))
+        p.line([min(tas_values_fw), max(tas_values_fw)],
+               [mean_wind, mean_wind],
+               legend_label=f'Mean apparent wind = {mean_wind:.1f} m/s')
 
     if data_plot.finalize() is not None: plots.append(data_plot)
 
     # TECS (fixed-wing or VTOLs)
+
     data_plot = DataPlot(ulog, plot_config, 'tecs_status', y_start=0, title='TECS',
                          y_axis_label='', plot_height='small',
                          changed_params=changed_params, x_range=x_range)
-    data_plot.add_graph([
-            lambda data: ('Total energy rate', data['total_energy_rate']),
-            lambda data: ('Total energy criticalness', ste_error_criticalness),
-            lambda data: ('Airspeed criticalness', tas_state_criticalness),
-            lambda data: ('Throttle criticalness scaled', throttle_state_criticalness * 10)
-        ],
-        colors8[:4],
-        [
-            'Total energy rate',
-            'Total energy criticalness',
-            'Airspeed criticalness',
-            'Throttle criticalness scaled'
+    try:
+        EAS2TAS = ulog.get_dataset("tecs_status").data["true_airspeed_sp"] / ulog.get_dataset("tecs_status").data["equivalent_airspeed_sp"]
+        # From TECS::_detect_underspeed()
+        TAS_min = ulog.initial_parameters["FW_AIRSPD_MIN"] * EAS2TAS
+        tas_state_criticalness = TAS_min * 0.9 - ulog.get_dataset("tecs_status").data["true_airspeed_filtered"]
+        throttle_state_criticalness = ulog.get_dataset("tecs_status").data["throttle_sp"] - ulog.initial_parameters["FW_THR_MAX"] * 0.95
+        # From TECS:_detect_uncommanded_descent()
+        ste_error_criticalness = ulog.get_dataset("tecs_status").data["total_energy_error"] - 200
+        data_plot.add_graph([
+                lambda data: ('Total energy rate', data['total_energy_rate']),
+                lambda data: ('Total energy criticalness', ste_error_criticalness),
+                lambda data: ('Airspeed criticalness', tas_state_criticalness),
+                lambda data: ('Throttle criticalness scaled', throttle_state_criticalness * 10)
             ],
-        mark_nan=True
-        )
+            colors8[:4],
+            [
+                'Total energy rate',
+                'Total energy criticalness',
+                'Airspeed criticalness',
+                'Throttle criticalness scaled'
+                ],
+            mark_nan=True
+            )
 
-    plot_tecs_modes_background(data_plot, tecs_mode_changes, vtol_states)
+        plot_tecs_modes_background(data_plot, tecs_mode_changes, vtol_states)
+    except KeyError:
+        pass
     if data_plot.finalize() is not None: plots.append(data_plot)
 
 
