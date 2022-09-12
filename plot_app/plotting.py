@@ -566,7 +566,7 @@ class DataPlot:
                     plot_parameter_changes(self._p, self.plot_height,
                                            changed_params)
 
-            self._cur_dataset = ulog.get_dataset(data_name)
+            self._cur_dataset = ulog.get_dataset(data_name, multi_instance=topic_instance)
 
             if y_start is not None:
                 # make sure y axis starts at y_start. We do it by adding an invisible circle
