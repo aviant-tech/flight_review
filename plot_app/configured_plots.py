@@ -535,18 +535,18 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
                 if data_plot.dataset:
                     data_plot.add_graph([lambda data: (f'airspeed_wind_{estimator_id}',
                                         np.sqrt(data['windspeed_north']**2 + data['windspeed_east']**2))],
-                                        colors8[4:5], [f'Airspeed-based wind ({estimator_id})'])
+                                        colors8[5:6], [f'Airspeed-based wind ({estimator_id})'])
             for estimator_id in range(6):
                 data_plot.change_dataset('estimator_wind', topic_instance=estimator_id)
                 if data_plot.dataset:
                     data_plot.add_graph([lambda data: (f'estimator_wind_{estimator_id}',
                                         np.sqrt(data['windspeed_north']**2 + data['windspeed_east']**2))],
-                                        colors8[5:6], [f'Estimated wind ({estimator_id})'])
+                                        colors8[6:7], [f'Estimated wind ({estimator_id})'])
             data_plot.change_dataset('wind')
             if data_plot.dataset:
                 data_plot.add_graph([lambda data: ('wind',
                                     np.sqrt(data['windspeed_north']**2 + data['windspeed_east']**2))],
-                                    colors8[6:7], ['Estimated wind (selected)'])
+                                    colors8[7:8], ['Estimated wind (selected)'])
             plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
 
             if data_plot.finalize() is not None: plots.append(data_plot)
