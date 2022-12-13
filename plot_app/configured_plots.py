@@ -516,10 +516,37 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
             data_plot.add_graph(['vel_m_s'], colors8[2:3], ['Ground Speed (from GPS)'])
             data_plot.change_dataset('tecs_status')
             data_plot.add_graph([true_airspeed_sp_fieldname], colors8[3:4], ['True Airspeed Setpoint'])
+
+            # Difference between airspeed and groundspeed
+            data_plot.change_dataset('airspeed_validated')
+            tas_timestamps = data_plot.dataset.data['timestamp']
+            data_plot.change_dataset('vehicle_gps_position')
+            gs_timestamps = data_plot.dataset.data['timestamp']
+            gs_values = np.interp(tas_timestamps, gs_timestamps, data_plot.dataset.data['vel_m_s'])
+            data_plot.change_dataset('airspeed_validated')
+            data_plot.add_graph([lambda data: ('relative_wind',
+                                np.abs(data['true_airspeed_m_s'] - gs_values))],
+                                colors8[4:5], ['Relative wind'])
+
+            # Various wind estimators
+            data_plot.change_dataset('airspeed_wind')
+            for estimator_id in range(2):
+                data_plot.change_dataset('airspeed_wind', topic_instance=estimator_id)
+                if data_plot.dataset:
+                    data_plot.add_graph([lambda data: (f'airspeed_wind_{estimator_id}',
+                                        np.sqrt(data['windspeed_north']**2 + data['windspeed_east']**2))],
+                                        colors8[4:5], [f'Airspeed-based wind ({estimator_id})'])
+            for estimator_id in range(6):
+                data_plot.change_dataset('estimator_wind', topic_instance=estimator_id)
+                if data_plot.dataset:
+                    data_plot.add_graph([lambda data: (f'estimator_wind_{estimator_id}',
+                                        np.sqrt(data['windspeed_north']**2 + data['windspeed_east']**2))],
+                                        colors8[5:6], [f'Estimated wind ({estimator_id})'])
             data_plot.change_dataset('wind')
-            data_plot.add_graph([lambda data: ('windspeed',
-                                np.sqrt(data['windspeed_north']**2 + data['windspeed_east']**2))],
-                                colors8[4:5], ['Estimated Wind'])
+            if data_plot.dataset:
+                data_plot.add_graph([lambda data: ('wind',
+                                    np.sqrt(data['windspeed_north']**2 + data['windspeed_east']**2))],
+                                    colors8[6:7], ['Estimated wind (selected)'])
             plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
 
             if data_plot.finalize() is not None: plots.append(data_plot)
