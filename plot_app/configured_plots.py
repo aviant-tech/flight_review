@@ -554,50 +554,61 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         pass
 
     # Airspeed vs ground speed scatter
-    data_plot = DataPlot(ulog, plot_config, 'airspeed_validated',
-                         title=f'Airspeed vs groundspeed', plot_height='small',
-                         x_axis_label='True airspeed [m/s]', y_axis_label='Apparent wind [m/s]')
-    data_plot.set_use_time_formatter(False)
-    tas_timestamps = data_plot.dataset.data['timestamp']
-    tas_values = data_plot.dataset.data['true_airspeed_m_s']
+    try:
+        data_plot = DataPlot(ulog, plot_config, 'airspeed_validated',
+                             title=f'Airspeed vs groundspeed', plot_height='small',
+                             x_axis_label='True airspeed [m/s]', y_axis_label='Apparent wind [m/s]')
+        data_plot.set_use_time_formatter(False)
+        tas_timestamps = data_plot.dataset.data['timestamp']
+        tas_values = data_plot.dataset.data['true_airspeed_m_s']
 
-    data_plot.change_dataset('vehicle_gps_position')
-    gs_timestamps = data_plot.dataset.data['timestamp']
-    gs_values = np.interp(tas_timestamps, gs_timestamps, data_plot.dataset.data['vel_m_s'])
+        data_plot.change_dataset('vehicle_gps_position')
+        gs_timestamps = data_plot.dataset.data['timestamp']
+        gs_values = np.interp(tas_timestamps, gs_timestamps, data_plot.dataset.data['vel_m_s'])
 
-    tas_values_fw = np.array([])
-    gs_values_fw = np.array([])
-    vtol_state_changes = zip(vtol_states[:-1], vtol_states[1:])
-    for (change_timestamp, mode), (next_change_timestamp, _) in vtol_state_changes:
-        # Mode 2 is fixed-wing
-        if mode != 2:
-            continue
-        fw_indexes = (tas_timestamps > change_timestamp) * (tas_timestamps < next_change_timestamp)
-        tas_values_fw = np.append(tas_values_fw, tas_values[fw_indexes])
-        gs_values_fw = np.append(gs_values_fw, gs_values[fw_indexes])
+        tas_values_fw = np.array([])
+        gs_values_fw = np.array([])
+        vtol_state_changes = zip(vtol_states[:-1], vtol_states[1:])
+        for (change_timestamp, mode), (next_change_timestamp, _) in vtol_state_changes:
+            # Mode 2 is fixed-wing
+            if mode != 2:
+                continue
+            fw_indexes = (tas_timestamps > change_timestamp) * (tas_timestamps < next_change_timestamp)
+            tas_values_fw = np.append(tas_values_fw, tas_values[fw_indexes])
+            gs_values_fw = np.append(gs_values_fw, gs_values[fw_indexes])
 
-    if gs_values_fw.shape[0] > 0 and tas_values_fw.shape[0] > 0:
-        mean_gs = np.average(gs_values_fw)
-        mean_tas = np.average(tas_values_fw)
-        airspeed_correction_factor = mean_gs/mean_tas
-        wind_values_fw = gs_values_fw - tas_values_fw
-        mean_wind = np.average(wind_values_fw)
+        if gs_values_fw.shape[0] > 0 and tas_values_fw.shape[0] > 0:
+            mean_gs = np.average(gs_values_fw)
+            mean_tas = np.average(tas_values_fw)
+            airspeed_correction_factor = mean_gs/mean_tas
+            wind_values_fw = gs_values_fw - tas_values_fw
+            mean_wind = np.average(wind_values_fw)
 
-        p = data_plot.bokeh_plot
-        p.circle(tas_values_fw,
-                 wind_values_fw,
-                 color=colors8[0],
-                 size=1,
-                 legend_label='Measurements (suggested ASPD_SCALE: {sign:s}{pct:.1f}% = {scale:.2f})'.format(
-                    sign="+" if airspeed_correction_factor >= 1 else "-",
-                    pct=np.abs(airspeed_correction_factor*100-100),
-                    scale=ulog.initial_parameters['ASPD_SCALE'] * airspeed_correction_factor,
-                ))
-        p.line([min(tas_values_fw), max(tas_values_fw)],
-               [mean_wind, mean_wind],
-               legend_label=f'Mean apparent wind = {mean_wind:.1f} m/s')
+            aspd_primary = ulog.initial_parameters.get('ASPD_PRIMARY', -1)
+            aspd_scale_param = 'ASPD_SCALE'
+            if aspd_primary > -1:
+                tmp_param = 'ASPD_SCALE_' + str(aspd_primary)
+                if tmp_param in ulog.initial_parameters:
+                    aspd_scale_param = tmp_param
+            adsp_scale = ulog.initial_parameters.get(aspd_scale_param, 1)  # Use dafault if not found
 
-    if data_plot.finalize() is not None: plots.append(data_plot)
+            p = data_plot.bokeh_plot
+            p.circle(tas_values_fw,
+                     wind_values_fw,
+                     color=colors8[0],
+                     size=1,
+                     legend_label='Measurements (suggested ASPD_SCALE: {sign:s}{pct:.1f}% = {scale:.2f})'.format(
+                        sign="+" if airspeed_correction_factor >= 1 else "-",
+                        pct=np.abs(airspeed_correction_factor*100-100),
+                        scale=adsp_scale*airspeed_correction_factor,
+                    ))
+            p.line([min(tas_values_fw), max(tas_values_fw)],
+                   [mean_wind, mean_wind],
+                   legend_label=f'Mean apparent wind = {mean_wind:.1f} m/s')
+
+        if data_plot.finalize() is not None: plots.append(data_plot)
+    except (KeyError, IndexError) as error:
+        pass
 
     # TECS (fixed-wing or VTOLs)
 
