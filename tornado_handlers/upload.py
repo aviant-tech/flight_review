@@ -21,7 +21,7 @@ from pyulog.db import DatabaseULog
 # this is needed for the following imports
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../plot_app'))
 from db_entry import DBVehicleData, DBData
-from config import get_db_filename, get_http_protocol, get_domain_name, \
+from config import get_ulogdb_filename, get_http_protocol, get_domain_name, \
     email_notifications_config
 from helper import get_total_flight_time, validate_url, get_log_filename, \
     load_ulog, get_airframe_name, ULogException
@@ -204,40 +204,24 @@ class UploadHandler(TornadoRequestHandlerBase):
 
                 # Load the ulog file but only if not uploaded via CI.
                 # Then we open the DB connection.
-                ulog = None
-                dbulog_pk = None
-                if source != 'CI':
-                    filename = get_log_filename(log_id)
-                    print(f'Loading log with {filename=}')
-                    ulog = ULog(filename)
+                filename = get_log_filename(log_id)
+                print(f'Loading log with {filename=}')
+                ulog = ULog(filename)
 
-                    db_handle = DatabaseULog.get_db_handle(get_db_filename())
+                ulogdb_handle = DatabaseULog.get_db_handle(get_ulogdb_filename())
+                digest = DatabaseULog.calc_sha256sum(filename)
+                dbulog_pk = DatabaseULog.primary_key_from_sha256sum(ulogdb_handle, digest)
+                if dbulog_pk is None:
                     print('Saving DatabaseULog to database.')
-                    dbulog = DatabaseULog(db_handle, ulog=ulog)
-                    dbulog.save()
+                    dbulog = DatabaseULog(ulogdb_handle, log_file=filename)
+                    dbulog.save(append_json=True)
                     dbulog_pk = dbulog.primary_key
+                else:
+                    print(f'Found DatabaseULog with hash {digest} in database.')
+                    print(f'Loading DatabaseULog with primary key {dbulog_pk} from database.')
+                    dbulog = DatabaseULog(ulogdb_handle, primary_key=dbulog_pk)
 
-                # put additional data into a DB
-                con = sqlite3.connect(get_db_filename())
-                cur = con.cursor()
-                cur.execute(
-                    'insert into Logs (Id, ULogId, Title, Description, '
-                    'OriginalFilename, Date, AllowForAnalysis, Obfuscated, '
-                    'Source, Email, WindSpeed, Rating, Feedback, Type, '
-                    'videoUrl, ErrorLabels, Public, Token) values '
-                    '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [log_id, dbulog_pk, title, description, upload_file_name,
-                     datetime.datetime.now(), allow_for_analysis,
-                     obfuscated, source, stored_email, wind_speed, rating,
-                     feedback, upload_type, video_url, error_labels, is_public, token])
-
-                if ulog is not None:
-                    vehicle_data = update_vehicle_db_entry(cur, ulog, log_id, vehicle_name)
-                    vehicle_name = vehicle_data.name
-
-                con.commit()
-
-                url = '/plot_app?log='+log_id
+                url = '/plot_app?log='+digest
                 full_plot_url = get_http_protocol()+'://'+get_domain_name()+url
                 print(full_plot_url)
 
@@ -298,15 +282,10 @@ class UploadHandler(TornadoRequestHandlerBase):
                     # (we may have the log already loaded in 'ulog', however the
                     # lru cache will make it very quick to load it again)
                     log_id = log_id
-                    generate_db_data_from_log_file(log_id, con)
                     # also generate the preview image
                     IOLoop.instance().add_callback(generate_overview_img_from_id, log_id)
 
 
-
-                con.commit()
-                cur.close()
-                con.close()
 
                 # send notification emails
                 send_notification_email(email, full_plot_url, delete_url, info)
