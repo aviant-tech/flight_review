@@ -22,7 +22,7 @@ from config_tables import *
 from config import get_log_filepath, get_airframes_filename, get_airframes_url, \
                    get_parameters_filename, get_parameters_url, \
                    get_log_cache_size, debug_print_timing, \
-                   get_releases_filename, get_db_filename
+                   get_releases_filename, get_db_filename, get_ulogdb_filename
 
 #pylint: disable=line-too-long, global-variable-not-assigned,invalid-name,global-statement
 
@@ -286,44 +286,18 @@ class ULogException(Exception):
     """
     pass
 
-def load_ulog(log_id):
+def load_ulog(sha256sum):
     """
-    Loads a ULog with Id log_id. First we check if there is a Logs row in the
-    database with Id=log_id and some ULogId. If yes, we return a DatabaseULog
-    object loaded from the ULog row. If no, we look for a file in the log_files
-    directory named <log_id>.ulg and try to load that instead.
-    """
-    db_handle = DatabaseULog.get_db_handle(get_db_filename())
-    dbulog_pk = None
-    with db_handle() as db:
-        cur = db.cursor()
-        cur.execute('SELECT ULogId FROM Logs WHERE Id = ?', [log_id])
-        row = cur.fetchone()
-        if row is None:
-            print(f'Did not find any Logs row in database with {log_id=}')
-        else:
-            dbulog_pk = row[0]
-            if dbulog_pk is None:
-                print(f'Found a Logs row in database with {log_id=}, but the ULogId was None')
-
-    if dbulog_pk is not None and DatabaseULog.exists_in_db(db_handle, dbulog_pk):
-        print(f'Loading log with with Id={log_id} and ULogId={dbulog_pk} from database')
-        ulog = DatabaseULog(db_handle, primary_key=dbulog_pk)
-    else:
-        ulog_filename = get_log_filename(log_id)
-        print(f'Found no Log object of Id={log_id} with ULogId set, so loading from {ulog_filename} instead.')
-        try:
-            ulog = ULog(ulog_filename)
-        except FileNotFoundError:
-            raise tornado.web.HTTPError(
-                status_code=404,
-                reason=f'Failed to open file with {ulog_filename=}'
-            )
-        except Exception:
-            raise tornado.web.HTTPError(
-                status_code=401,
-                reason=f'Got an error while reading {ulog_filename=} from file'
-            )
+    Loads a ULog with the given SHA256sum, or throw a 404. """
+    ulogdb_handle = DatabaseULog.get_db_handle(get_ulogdb_filename())
+    print(f'Loading log with with {sha256sum=} from ULog database {get_ulogdb_filename()}')
+    dbulog_pk = DatabaseULog.primary_key_from_sha256sum(ulogdb_handle, sha256sum)
+    if dbulog_pk is None:
+        raise tornado.web.HTTPError(
+            status_code=404,
+            reason=f'Could not find ULog with {sha256sum=}'
+        )
+    ulog = DatabaseULog(ulogdb_handle, primary_key=dbulog_pk)
     return ulog
 
 def get_airframe_name(ulog, multi_line=False):

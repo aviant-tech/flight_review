@@ -30,6 +30,7 @@ __MAPBOX_API_ACCESS_TOKEN = _conf.get('general', 'mapbox_api_access_token')
 __BING_API_KEY = _conf.get('general', 'bing_maps_api_key')
 __LOG_CACHE_SIZE = int(_conf.get('general', 'log_cache_size'))
 __DB_FILENAME_CUSTOM = _conf.get('general', 'db_filename')
+__ULOGDB_FILENAME_CUSTOM = _conf.get('general', 'ulogdb_filename')
 
 __STORAGE_PATH = _conf.get('general', 'storage_path')
 if not os.path.isabs(__STORAGE_PATH):
@@ -37,6 +38,7 @@ if not os.path.isabs(__STORAGE_PATH):
 
 __LOG_FILE_PATH = os.path.join(__STORAGE_PATH, 'log_files')
 __DB_FILENAME = os.path.join(__STORAGE_PATH, 'logs.sqlite')
+__ULOGDB_FILENAME = os.path.join(__STORAGE_PATH, 'pyulog.sqlite3')
 __CACHE_FILE_PATH = os.path.join(__STORAGE_PATH, 'cache')
 __AIRFRAMES_FILENAME = os.path.join(__CACHE_FILE_PATH, 'airframes.xml')
 __PARAMETERS_FILENAME = os.path.join(__CACHE_FILE_PATH, 'parameters.xml')
@@ -98,6 +100,12 @@ def get_db_filename():
     if __DB_FILENAME_CUSTOM != "":
         return __DB_FILENAME_CUSTOM
     return __DB_FILENAME
+
+def get_ulogdb_filename():
+    """ get configured ULog DB file name """
+    if __ULOGDB_FILENAME_CUSTOM != "":
+        return __ULOGDB_FILENAME_CUSTOM
+    return __ULOGDB_FILENAME
 
 def get_airframes_filename():
     """ get configured airframes file name """
