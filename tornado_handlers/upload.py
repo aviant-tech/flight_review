@@ -202,8 +202,6 @@ class UploadHandler(TornadoRequestHandlerBase):
                 # generate a token: secure random string (url-safe)
                 token = str(binascii.hexlify(os.urandom(16)), 'ascii')
 
-                # Load the ulog file but only if not uploaded via CI.
-                # Then we open the DB connection.
                 filename = get_log_filename(log_id)
                 print(f'Loading log with {filename=}')
                 ulog = ULog(filename)

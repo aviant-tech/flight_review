@@ -288,11 +288,7 @@ class ULogException(Exception):
 
 def load_ulog(sha256sum):
     """
-    Loads a ULog with Id log_id. First we check if there is a Logs row in the
-    database with Id=log_id and some ULogId. If yes, we return a DatabaseULog
-    object loaded from the ULog row. If no, we look for a file in the log_files
-    directory named <log_id>.ulg and try to load that instead.
-    """
+    Loads a ULog with the given SHA256sum, or throw a 404. """
     ulogdb_handle = DatabaseULog.get_db_handle(get_ulogdb_filename())
     print(f'Loading log with with {sha256sum=} from ULog database {get_ulogdb_filename()}')
     dbulog_pk = DatabaseULog.primary_key_from_sha256sum(ulogdb_handle, sha256sum)
