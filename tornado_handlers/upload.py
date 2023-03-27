@@ -212,7 +212,7 @@ class UploadHandler(TornadoRequestHandlerBase):
                 if dbulog_pk is None:
                     print('Saving DatabaseULog to database.')
                     dbulog = DatabaseULog(ulogdb_handle, log_file=filename)
-                    dbulog.save(append_json=True)
+                    dbulog.save()
                     dbulog_pk = dbulog.primary_key
                 else:
                     print(f'Found DatabaseULog with hash {digest} in database.')
