@@ -781,13 +781,27 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     if data_plot.finalize() is not None: plots.append(data_plot)
 
     # Vibration Metrics
-    data_plot = DataPlot(ulog, plot_config, 'estimator_status',
+    data_plot = DataPlot(ulog, plot_config, 'vehicle_imu_status',
                          title='Vibration Metrics',
                          plot_height='small', changed_params=changed_params,
-                         x_range=x_range, y_start=0)
-    data_plot.add_graph(['vibe[2]'], colors3[2:3], ['Delta Velocity Vibration Level [m/s]'])
+                         x_range=x_range, y_start=0, topic_instance=0)
+    data_plot.add_graph(['accel_vibration_metric'], colors8[0:1],
+                        ['Accel 0 Vibration Level [m/s^2]'])
+
+    data_plot.change_dataset('vehicle_imu_status', 1)
+    data_plot.add_graph(['accel_vibration_metric'], colors8[1:2],
+                        ['Accel 1 Vibration Level [m/s^2]'])
+
+    data_plot.change_dataset('vehicle_imu_status', 2)
+    data_plot.add_graph(['accel_vibration_metric'], colors8[2:3],
+                        ['Accel 2 Vibration Level [m/s^2]'])
+
+    data_plot.change_dataset('vehicle_imu_status', 3)
+    data_plot.add_graph(['accel_vibration_metric'], colors8[3:4],
+                        ['Accel 3 Vibration Level [rad/s]'])
+
     data_plot.add_horizontal_background_boxes(
-        ['green', 'orange', 'red'], [0.02, 0.04])
+        ['green', 'orange', 'red'], [4.905, 9.81])
 
     if data_plot.finalize() is not None: plots.append(data_plot)
 
