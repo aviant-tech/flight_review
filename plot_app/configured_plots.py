@@ -948,69 +948,75 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
     if data_plot.finalize() is not None: plots.append(data_plot)
 
-    # thrust and magentic field scatter plot
-    min_thrust = 0.5
+    # MR thrust and magnetometer norm scatter plot
     data_plot = DataPlot(ulog, plot_config, 'actuator_controls_0',
-                         title=f'Thrust and magnetic norm scatter plot (polyfit for thrust > {min_thrust})', plot_height='small',
-                         x_axis_label='Thrust', y_axis_label='Magnetic field norm')
-    data_plot.set_use_time_formatter(False)
-    thrust_timestamps = data_plot.dataset.data['timestamp']
-    thrust_values = data_plot.dataset.data['control[3]']
+                         title=f'Thrust and magnetometer norm (fit between lines)', plot_height='small',
+                         x_axis_label='MR thrust', y_axis_label='Magnetometer norm')
+    data_plot.scatter_and_fit(x_dataset='actuator_controls_0',
+                              x_field='control[3]',
+                              x_topic_instances=(0,1), # Support single and dual circuit
+                              fit_min_x=0.55, # Low thrust values are for descents
+                              fit_max_x=0.90, # High thrust values are spikes
+                              y_dataset=magnetometer_ga_topic,
+                              y_field=lambda data: np.sqrt(data['magnetometer_ga[0]']**2 +
+                                                           data['magnetometer_ga[1]']**2 +
+                                                           data['magnetometer_ga[2]']**2),
+                              y_topic_instances=(0,1)) # Include both magnetometers if enabled
+    if data_plot.finalize() is not None: plots.append(data_plot)
 
-    max_mag_norm = 0
-    for topic_instance in range(2):
-        data_plot.change_dataset(magnetometer_ga_topic, topic_instance=topic_instance)
-        if data_plot.dataset is None or not 'magnetometer_ga[0]' in data_plot.dataset.data:
-            continue
-        mag_norm_values = np.sqrt(
-            data_plot.dataset.data['magnetometer_ga[0]']**2
-            + data_plot.dataset.data['magnetometer_ga[1]']**2
-            + data_plot.dataset.data['magnetometer_ga[2]']**2
-        )
-        mag_timestamps = data_plot.dataset.data['timestamp']
+    # MR thrust and voltage scatter plot. Don't use voltage, due to voltage
+    # drop causing negative correlation
+    data_plot = DataPlot(ulog, plot_config, 'actuator_controls_0',
+                         title=f'MR thrust and consumed (fit between lines)', plot_height='small',
+                         x_axis_label='Consumed mAh', y_axis_label='MR thrust')
+    data_plot.scatter_and_fit(x_dataset='battery_status',
+                              x_field='discharged_mah',
+                              x_topic_instances=(0,1), # Support single and dual circuit
+                              y_dataset='actuator_controls_0',
+                              y_field='control[3]',
+                              fit_min_y=0.55, fit_max_y=0.90) # Filter for hover thrust
+    if data_plot.finalize() is not None: plots.append(data_plot)
 
-        # Bohek doesn't handle np.nan values, so we just remove them. Same as
-        # line 791 in plot_app/plotting.py on commit
-        # eba80b8d095ac85bbe2801b2583c78e984aa2ce4.
-        not_nan_idxs = np.logical_not(np.logical_or(
-            np.isnan(mag_timestamps),
-            np.isnan(mag_norm_values)
-        ))
-        mag_timestamps = mag_timestamps[not_nan_idxs]
-        mag_norm_values = mag_norm_values[not_nan_idxs]
-        # Some logs might have a single magnetometer measurement with a np.nan
-        # value. Not sure why, but in those cases we should just proceed to the
-        # next magnetometer.
-        if not np.any(not_nan_idxs):
-            continue
-
-        thrust_values_interp = np.interp(mag_timestamps, thrust_timestamps, thrust_values)
-
-        p = data_plot.bokeh_plot
-        p.circle(thrust_values_interp, mag_norm_values,
-                color=colors8[topic_instance],
-                legend_label=f'Magnetometer {topic_instance}')
-        max_mag_norm = np.max([max_mag_norm, np.max(mag_norm_values)])
-
-        filter_idxs = thrust_values_interp >= min_thrust
-        if np.any(filter_idxs):
-            mag_norm_filtered = mag_norm_values[filter_idxs]
-            thrust_filtered = thrust_values_interp[filter_idxs]
-
-            c1, c0 = np.polyfit(thrust_filtered, mag_norm_filtered, 1)
-            fit_func = np.poly1d((c1, c0))
-
-            polyfit_xs = np.linspace(0, 1, 100)
-            polyfit_ys = fit_func(polyfit_xs)
-            max_mag_norm = np.max([max_mag_norm, np.max(polyfit_ys)])
-            p.line(polyfit_xs, fit_func(polyfit_xs),
-                    color=colors8[topic_instance],
-                    legend_label=f'Fit {topic_instance}: y={c0:.3f} (1 + {c1/c0:.3f}x)')
+    # FW thrust and voltage scatter plot. Don't use voltage, due to voltage
+    # drop causing negative correlation
+    data_plot = DataPlot(ulog, plot_config, 'actuator_controls_1',
+                         title=f'FW thrust and consumed (fit between lines)', plot_height='small',
+                         x_axis_label='Consumed mAh', y_axis_label='FW thrust')
+    data_plot.scatter_and_fit(x_dataset='battery_status',
+                              x_field='discharged_mah',
+                              x_topic_instances=(0,), # Pusher is always battery 0
+                              y_dataset='actuator_controls_1',
+                              y_field='control[3]',
+                              fit_min_y=0.55, fit_max_y=0.90) # Filter for level cruising
+    if data_plot.finalize() is not None: plots.append(data_plot)
 
 
-    p.x_range = Range1d(start=0, end=1)
-    p.y_range = Range1d(start=0, end=max_mag_norm*1.1)
+    # Battery 0 consumed and power scatter plot.
+    data_plot = DataPlot(ulog, plot_config, 'battery_status',
+                         title=f'Pusher battery efficiency (fit between lines)', plot_height='small',
+                         x_axis_label='Consumed mAh', y_axis_label='Power [W]')
+    data_plot.scatter_and_fit(x_dataset='battery_status',
+                              x_field='discharged_mah',
+                              x_topic_instances=(0,),
+                              fit_min_x=100, # Filter away before takeoff
+                              y_dataset='battery_status',
+                              y_field=lambda data: data['current_a'] * data['voltage_v'],
+                              y_topic_instances=(0,),
+                              fit_min_y=800, fit_max_y=1800) # Filter idling or climbing
+    if data_plot.finalize() is not None: plots.append(data_plot)
 
+    # Battery 1 consumed and power scatter plot.
+    data_plot = DataPlot(ulog, plot_config, 'battery_status',
+                         title=f'Top battery efficiency (fit between lines)', plot_height='small',
+                         x_axis_label='Consumed mAh', y_axis_label='Power [W]')
+    data_plot.scatter_and_fit(x_dataset='battery_status',
+                              x_field='discharged_mah',
+                              x_topic_instances=(1,),
+                              fit_min_x=100, # Filter away before takeoff
+                              y_dataset='battery_status',
+                              y_field=lambda data: data['current_a'] * data['voltage_v'],
+                              y_topic_instances=(1,),
+                              fit_min_y=2500, fit_max_y=5500) # Filter on hover
     if data_plot.finalize() is not None: plots.append(data_plot)
 
 

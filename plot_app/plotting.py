@@ -696,6 +696,108 @@ class DataPlot:
             print(type(error), "("+self._data_name+"):", error)
             self._had_error = True
 
+    def scatter_and_fit(self, *,
+                        x_dataset, x_field,
+                        y_dataset, y_field,
+                        fit_min_x=None, fit_max_x=None, x_topic_instances=(0,),
+                        fit_min_y=None, fit_max_y=None, y_topic_instances=(0,)):
+        self.set_use_time_formatter(False)
+
+        max_x = -np.inf
+        max_y = -np.inf
+        min_x = np.inf
+        min_y = np.inf
+        for x_topic_instance in x_topic_instances:
+            self.change_dataset(x_dataset, topic_instance=x_topic_instance)
+            if self.dataset is None:
+                continue
+            if callable(x_field):
+                x_values = x_field(self.dataset.data)
+            elif x_field in self.dataset.data:
+                x_values = self.dataset.data[x_field]
+            else:
+                continue
+            x_timestamps = self.dataset.data['timestamp']
+
+            colors=['green', 'red', 'blue', 'orange']
+            for y_topic_instance in y_topic_instances:
+                color_idx = 2*x_topic_instance + y_topic_instance
+                self.change_dataset(y_dataset, topic_instance=y_topic_instance)
+                if self.dataset is None:
+                    continue
+                if callable(y_field):
+                    y_values = y_field(self.dataset.data)
+                elif y_field in self.dataset.data:
+                    y_values = self.dataset.data[y_field]
+                else:
+                    continue
+                y_timestamps = self.dataset.data['timestamp']
+
+                # Bohek doesn't handle np.nan values, so we just remove them. Same
+                # as line 791 in plot_app/plotting.py on commit
+                # eba80b8d095ac85bbe2801b2583c78e984aa2ce4.  Some magnetometer logs
+                # might have a single valuewith a np.nan value. Not sure why, but
+                # in those cases we should just skip.
+                not_nan_idxs = np.logical_not(np.logical_or(
+                    np.isnan(y_timestamps),
+                    np.isnan(y_values)
+                ))
+                if not np.any(not_nan_idxs):
+                    continue
+                y_timestamps = y_timestamps[not_nan_idxs]
+                y_values = y_values[not_nan_idxs]
+
+                x_values_interp = np.interp(y_timestamps, x_timestamps, x_values)
+
+                self.bokeh_plot.circle(
+                    x_values_interp, y_values,
+                    color=colors[color_idx],
+                    size=1,
+                    legend_label=f'{x_dataset}[{x_topic_instance}] & {y_dataset}[{y_topic_instance}]'
+                )
+                max_x = np.max([max_x, np.max(x_values)])
+                max_y = np.max([max_y, np.max(y_values)])
+                min_x = np.min([min_x, np.min(x_values)])
+                min_y = np.min([min_y, np.min(y_values)])
+
+                fit_idxs = np.ones_like(y_timestamps)
+                if fit_min_x is not None:
+                    fit_idxs = np.logical_and(fit_idxs, fit_min_x < x_values_interp)
+                if fit_max_x is not None:
+                    fit_idxs = np.logical_and(fit_idxs, x_values_interp < fit_max_x)
+                if fit_min_y is not None:
+                    fit_idxs = np.logical_and(fit_idxs, fit_min_y < y_values)
+                if fit_max_y is not None:
+                    fit_idxs = np.logical_and(fit_idxs, y_values < fit_max_y)
+                if not np.any(fit_idxs):
+                    continue
+
+                y_fit = y_values[fit_idxs]
+                x_fit = x_values_interp[fit_idxs]
+
+                c1, c0 = np.polyfit(x_fit, y_fit, 1)
+                fit_func = np.poly1d((c1, c0))
+
+                polyfit_xs = np.linspace(min_x, max_x, 100)
+                polyfit_ys = fit_func(polyfit_xs)
+                relative_corr = c1/c0*(np.max(x_values)-np.min(x_values))
+                self.bokeh_plot.line(
+                    polyfit_xs, fit_func(polyfit_xs),
+                    color=colors[color_idx],
+                    legend_label=f'Fit {color_idx} [{100*relative_corr:.1f}%]: y={c0:.2e} (1 + {c1/c0:.2e}x)'
+                )
+
+            self.bokeh_plot.x_range = Range1d(start=min_x, end=max_x*1.1)
+            self.bokeh_plot.y_range = Range1d(start=min_y, end=max_y*1.1)
+            if fit_min_y is not None:
+                self.bokeh_plot.add_layout(Span(dimension='width', line_color='black', line_width=0.5, location=fit_min_y))
+            if fit_max_y is not None:
+                self.bokeh_plot.add_layout(Span(dimension='width', line_color='black', line_width=0.5, location=fit_max_y))
+            if fit_min_x is not None:
+                self.bokeh_plot.add_layout(Span(dimension='height', line_color='black', line_width=0.5, location=fit_min_x))
+            if fit_max_x is not None:
+                self.bokeh_plot.add_layout(Span(dimension='height', line_color='black', line_width=0.5, location=fit_max_x))
+
     def add_circle(self, field_names, colors, legends):
         """ add circles
 
