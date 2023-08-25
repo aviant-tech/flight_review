@@ -718,6 +718,33 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
     if data_plot.finalize() is not None: plots.append(data_plot)
 
+    # angle FFT
+    for index, axis in enumerate(['roll', 'pitch', 'yaw']):
+
+        # angle
+        axis_name = axis.capitalize()
+        data_plot = DataPlotFFT(ulog, plot_config, 'vehicle_attitude',
+                              title=axis_name+' Angle FFT',
+                             plot_height='small',
+                             y_range = Range1d(0, 100))
+        data_plot.add_graph([lambda data: (axis, np.rad2deg(angle_functions[index](data)))],
+                            colors3[0:1], [axis_name+' Estimated'])
+        data_plot.change_dataset('vehicle_attitude_setpoint')
+        data_plot.add_graph([lambda data: (axis+'_d', np.rad2deg(angle_functions[index](data, s='_d')))],
+                            colors3[1:2], [axis_name+' Setpoint'])
+        if axis == 'yaw':
+            data_plot.add_graph(
+                [lambda data: ('yaw_sp_move_rate', np.rad2deg(data['yaw_sp_move_rate']))],
+                colors3[2:3], [axis_name+' FF Setpoint [deg/s]'])
+        data_plot.change_dataset('vehicle_attitude_groundtruth')
+        data_plot.add_graph([lambda data: (axis, np.rad2deg(data[axis]))],
+                            [color_gray], [axis_name+' Groundtruth'])
+        plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
+
+        if data_plot.finalize() is not None: plots.append(data_plot)
+
+
+
 
     # actuator controls 1
     # (only present on VTOL, Fixed-wing config)
