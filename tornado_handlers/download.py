@@ -35,8 +35,6 @@ class DownloadHandler(TornadoRequestHandlerBase):
             raise tornado.web.HTTPError(400, 'Invalid Parameter')
         log_file_name = get_log_filename(log_id)
         download_type = self.get_argument('type', default='0')
-        if not os.path.exists(log_file_name):
-            raise tornado.web.HTTPError(404, 'Log not found')
 
 
         def get_original_filename(default_value, new_file_suffix):
@@ -76,6 +74,10 @@ class DownloadHandler(TornadoRequestHandlerBase):
                 self.write('\n')
 
         elif download_type == '2': # download the kml file
+            if not os.path.exists(log_file_name):
+                # TODO add support for converting ulog from db to kml file
+                raise CustomHTTPError(501, 'kml export from db not supported')
+
             kml_path = get_kml_filepath()
             kml_file_name = os.path.join(kml_path, log_id.replace('/', '.')+'.kml')
 
@@ -158,6 +160,10 @@ class DownloadHandler(TornadoRequestHandlerBase):
                     pass
 
         else: # download the log file
+            if not os.path.exists(log_file_name):
+                # TODO add support
+                raise CustomHTTPError(501, 'log download from db not supported')
+
             self.set_header('Content-Type', 'application/octet-stream')
             self.set_header("Content-Description", "File Transfer")
             self.set_header('Content-Disposition', 'attachment; filename={}'.format(
