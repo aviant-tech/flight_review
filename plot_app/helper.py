@@ -380,3 +380,27 @@ def validate_error_ids(err_ids):
             return False
 
     return True
+
+
+def lpf(values, timestamps, time_const, initial=None):
+    """
+    Use a discrete low pass filter to filter the values.
+
+    :param values: numpy array of values to filter
+    :param timestamps: numpy array of timestamps in us
+    :param time_const: time constant in seconds
+    :param initial: initial value (optional). If None, the first value is used
+    :return: numpy array of filtered values, length is the same as input values
+    """
+
+    lpf_values = np.zeros(values.shape)
+    if initial is not None:
+        lpf_values[0] = initial
+    else:
+        lpf_values[0] = values[0]
+
+    for i in range(1, len(values)):
+        dt = (timestamps[i] - timestamps[i-1])/1e6
+        alpha = dt/(dt + time_const)  # Add dt to allow time_const=0
+        lpf_values[i] = (1-alpha)*lpf_values[i-1] + alpha*values[i]
+    return lpf_values
