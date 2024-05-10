@@ -39,7 +39,7 @@ if not os.path.isabs(__STORAGE_PATH):
 
 __LOG_FILE_PATH = os.path.join(__STORAGE_PATH, 'log_files')
 __DB_FILENAME = os.path.join(__STORAGE_PATH, 'logs.sqlite')
-__ULOGDB_FILENAME = os.path.join(__STORAGE_PATH, 'pyulog.sqlite3')
+__ULOGDB_FILENAME = os.path.join(__STORAGE_PATH, 'shared-pyulog-db/pyulog.sqlite3')
 __CACHE_FILE_PATH = os.path.join(__STORAGE_PATH, 'cache')
 __AIRFRAMES_FILENAME = os.path.join(__CACHE_FILE_PATH, 'airframes.xml')
 __PARAMETERS_FILENAME = os.path.join(__CACHE_FILE_PATH, 'parameters.xml')
