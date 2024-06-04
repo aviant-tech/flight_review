@@ -7,6 +7,9 @@ services:
       - ./config_user.ini:/opt/service/config_user.ini:ro
     ports:
       - 5006:5006
+    environment:
+      - USE_PROXY
+      - DOMAIN
 
 volumes:
   flight-review-data:
