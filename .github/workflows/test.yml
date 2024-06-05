@@ -3,23 +3,23 @@ name: Run Tests
 on:
   push:
     branches:
-    - 'master'
+      - "master"
   pull_request:
     branches:
-    - '*'
+      - "*"
 
 jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false  # don't cancel if a job from the matrix fails
+      fail-fast: false # don't cancel if a job from the matrix fails
       matrix:
-        python-version: [3.6, 3.8]
+        python-version: [3.8]
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
-          submodules: 'recursive'
+          submodules: "recursive"
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v2
         with:
@@ -28,7 +28,6 @@ jobs:
         run: |
           sudo apt install -y sqlite3 fftw3 libfftw3-dev
           pip install -r requirements.txt
-      - name : Running Tests
+      - name: Running Tests
         run: |
           ./run_pylint.sh
-
