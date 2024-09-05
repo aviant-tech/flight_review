@@ -1,0 +1,64 @@
+name: Deploy
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: "The tag for the image."
+        required: true
+        type: string
+      ref:
+        description: "The reference to check out (can be a commit hash, branch or tag name)."
+        default: ""
+        required: false
+        type: string
+      release:
+        description: "Wether this deployment is a release or not."
+        required: false
+        type: boolean
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.ref }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-north-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          mask-password: "true"
+
+      - name: Fail if tag is 'latest'
+        if: ${{ inputs.tag == 'latest' }}
+        run: exit 1
+
+      - name: setup buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Prepare Docker tags
+        id: prepare-tags
+        run: |
+          TAGS="${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ inputs.tag }},${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:staging-latest"
+          if [[ "${{ inputs.release }}" == "true" ]]; then
+            TAGS="${TAGS},${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:release"
+          fi
+          echo "TAGS=$TAGS" >> $GITHUB_ENV
+
+      - name: Build and push image to Amazon ecr
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ env.TAGS }}
+          cache-from: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:buildcache
+          cache-to: image-manifest=true,oci-mediatypes=true,type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:buildcache,mode=max

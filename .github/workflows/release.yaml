@@ -1,0 +1,48 @@
+name: Release
+on:
+  push:
+    branches:
+      - main
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version_step.outputs.VERSION }}
+      new_sha: ${{ steps.new_sha.outputs.SHA }}
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - name: Python Semantic Release
+        uses: python-semantic-release/python-semantic-release@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          root_options: -vv --config pyproject.toml
+
+      - id: version_step
+        run: |
+          echo "VERSION=$(python3 setup.py -V)" >> $GITHUB_OUTPUT
+      - id: new_sha
+        run: |
+          new_sha=$(git rev-parse HEAD)
+          echo "SHA=$new_sha" >> $GITHUB_OUTPUT
+
+  deploy-to-ecr:
+    needs: release
+    uses: ./.github/workflows/deploy.yaml
+    with:
+      tag: ${{ needs.release.outputs.version }}
+      ref: ${{ needs.release.outputs.new_sha }}
+      release: true
+    secrets: inherit
+
+  staging-deploy:
+    needs: deploy-to-ecr
+    uses: ./.github/workflows/staging-deploy.yaml
+    secrets: inherit
