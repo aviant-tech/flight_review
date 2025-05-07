@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.2 (2025-05-07)
+
+### Build System
+
+- Fix compose file location in deploy jobs
+  ([`f9ed709`](https://github.com/aviant-tech/flight_review/commit/f9ed7091ad3ac4c377e92dcb2b43f07a571c709c))
+
+
 ## v0.1.1 (2025-05-07)
 
 ### Build System
