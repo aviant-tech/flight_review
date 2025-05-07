@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.1 (2025-05-07)
+
+### Build System
+
+- Fix dockerfile location in deploy job
+  ([`e0f371d`](https://github.com/aviant-tech/flight_review/commit/e0f371d1e69cd66e6915201cc84f3e4bbd376656))
+
+
 ## v0.1.0 (2025-05-07)
 
 ### Bug Fixes
