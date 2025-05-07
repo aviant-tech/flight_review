@@ -49,8 +49,8 @@ jobs:
 
       - name: Move docker compose files to ec2
         run: |
-          scp docker-compose.yml ${{ secrets.AWS_PROD_SSH_USER }}@${{ secrets.AWS_PROD_HOST }}:/home/admin/flight-review/
-          scp docker-compose.prod.yml ${{ secrets.AWS_PROD_SSH_USER }}@${{ secrets.AWS_PROD_HOST }}:/home/admin/flight-review/
+          scp docker/docker-compose.yml ${{ secrets.AWS_PROD_SSH_USER }}@${{ secrets.AWS_PROD_HOST }}:/home/admin/flight-review/
+          scp docker/docker-compose.prod.yml ${{ secrets.AWS_PROD_SSH_USER }}@${{ secrets.AWS_PROD_HOST }}:/home/admin/flight-review/
 
       - name: Deploy on EC2
         run: |
