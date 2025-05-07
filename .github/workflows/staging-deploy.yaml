@@ -19,7 +19,7 @@ jobs:
       - name: Move docker compose files to ec2
         run: |
           scp docker-compose.yml ${{ secrets.AWS_STAGING_SSH_USER }}@${{ secrets.AWS_STAGING_HOST }}:/home/admin/flight-review/
-          scp docker-compose.staging.yml ${{ secrets.AWS_STAGING_SSH_USER }}@${{ secrets.AWS_STAGING_HOST }}:/home/admin/filght-review/
+          scp docker-compose.staging.yml ${{ secrets.AWS_STAGING_SSH_USER }}@${{ secrets.AWS_STAGING_HOST }}:/home/admin/flight-review/
 
       - name: Deploy on EC2
         run: |
