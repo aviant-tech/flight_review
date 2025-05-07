@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.2.1 (2025-05-07)
+
+### Build System
+
+- Staging image is staging-latest, not latest
+  ([`47126ac`](https://github.com/aviant-tech/flight_review/commit/47126ac28c70d83925608cb66e70c33e61b4c51b))
+
+
 ## v0.2.0 (2025-05-07)
 
 ### Features
