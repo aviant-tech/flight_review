@@ -733,46 +733,23 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
     if data_plot.finalize() is not None: plots.append(data_plot)
 
-
     # actuator outputs 0: Main
-    data_plot = DataPlot(ulog, plot_config, 'actuator_outputs',
-                         y_start=0, title='Actuator Outputs (Main)', plot_height='small',
-                         changed_params=changed_params, x_range=x_range)
-    num_actuator_outputs = 16
-    if data_plot.dataset:
-        max_outputs = np.amax(data_plot.dataset.data['noutputs'])
-        if max_outputs < num_actuator_outputs: num_actuator_outputs = max_outputs
-    data_plot.add_graph(['output['+str(i)+']' for i in range(num_actuator_outputs)],
-                        [colors8[i % 8] for i in range(num_actuator_outputs)],
-                        ['Output '+str(i) for i in range(num_actuator_outputs)], mark_nan=True)
-    plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
-
-    if data_plot.finalize() is not None: plots.append(data_plot)
-
-    # actuator outputs 1: AUX
-    data_plot = DataPlot(ulog, plot_config, 'actuator_outputs',
-                         y_start=0, title='Actuator Outputs (AUX)', plot_height='small',
-                         changed_params=changed_params, topic_instance=1,
-                         x_range=x_range)
-    num_actuator_outputs = 16
-    # only plot if at least one of the outputs is not constant
-    all_constant = True
-    if data_plot.dataset:
-        max_outputs = np.amax(data_plot.dataset.data['noutputs'])
-        if max_outputs < num_actuator_outputs: num_actuator_outputs = max_outputs
-
-        for i in range(num_actuator_outputs):
-            output_data = data_plot.dataset.data['output['+str(i)+']']
-            if not np.all(output_data == output_data[0]):
-                all_constant = False
-    if not all_constant:
+    for ao_idx in (0, 1, 2):
+        data_plot = DataPlot(ulog, plot_config, 'actuator_outputs',
+                             y_start=0, title=f'Actuator Outputs ({ao_idx})', plot_height='small',
+                             changed_params=changed_params, topic_instance=ao_idx,
+                             x_range=x_range)
+        num_actuator_outputs = 16
+        if data_plot.dataset:
+            max_outputs = np.amax(data_plot.dataset.data['noutputs'])
+            if max_outputs < num_actuator_outputs:
+                num_actuator_outputs = max_outputs
         data_plot.add_graph(['output['+str(i)+']' for i in range(num_actuator_outputs)],
                             [colors8[i % 8] for i in range(num_actuator_outputs)],
                             ['Output '+str(i) for i in range(num_actuator_outputs)], mark_nan=True)
         plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
 
         if data_plot.finalize() is not None: plots.append(data_plot)
-
 
     # raw acceleration
     data_plot = DataPlot(ulog, plot_config, 'sensor_combined',
