@@ -1,6 +1,6 @@
 services:
   flight-review:
-    image: 376527296926.dkr.ecr.eu-north-1.amazonaws.com/flight-review:latest
+    image: 376527296926.dkr.ecr.eu-north-1.amazonaws.com/flight-review:staging-latest
     logging:
       driver: awslogs
       options:
