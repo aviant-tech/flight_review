@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.2.0 (2025-05-07)
+
+### Features
+
+- Plot actuator_outputs instances 0, 1, and 2
+  ([`f695efa`](https://github.com/aviant-tech/flight_review/commit/f695efa4c83b50404133a33d29d2afc3fb79db50))
+
+
 ## v0.1.2 (2025-05-07)
 
 ### Build System
