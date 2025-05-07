@@ -1,7 +1,6 @@
 bokeh==2.1.1
 jinja2==3.0
 markupsafe==2.0.1
-jupyter
 pyfftw
 pylint
 git+https://github.com/hermankolden/pyulog@4c753f19b4fec392684d6044c240ce7aeb39710c
