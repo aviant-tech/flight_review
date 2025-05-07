@@ -1,0 +1,3 @@
+services:
+  flight-review:
+    image: px4flightreview:latest

@@ -1,0 +1,33 @@
+name: Staging-deploy
+on:
+  workflow_call:
+
+jobs:
+  deploy_to_ec2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SSH key
+        run: |
+          mkdir -p ~/.ssh/
+          echo "${{ secrets.AWS_STAGING_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+      - name: Add known_hosts
+        run: ssh-keyscan -H ${{ secrets.AWS_STAGING_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Move docker compose files to ec2
+        run: |
+          scp docker-compose.yml ${{ secrets.AWS_STAGING_SSH_USER }}@${{ secrets.AWS_STAGING_HOST }}:/home/admin/flight-review/
+          scp docker-compose.staging.yml ${{ secrets.AWS_STAGING_SSH_USER }}@${{ secrets.AWS_STAGING_HOST }}:/home/admin/flight-review/
+
+      - name: Deploy on EC2
+        run: |
+          set -e
+          ssh ${{ secrets.AWS_STAGING_SSH_USER }}@${{ secrets.AWS_STAGING_HOST }} <<'ENDSSH'
+          cd /home/admin/flight-review/
+          aws ecr get-login-password --region eu-north-1 | docker login --username AWS --password-stdin 376527296926.dkr.ecr.eu-north-1.amazonaws.com
+          docker compose -f docker-compose.yml -f docker-compose.staging.yml pull
+          docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d
+          docker image prune -f
+          ENDSSH

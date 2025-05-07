@@ -1,15 +1,17 @@
-version: "3.3"
 services:
-  srv:
-    image: px4flightreview
-    restart: always
-    network_mode: bridge
+  flight-review:
+    restart: unless-stopped
+    volumes:
+      - flight-review-data:/opt/service/data
+      - shared-pyulog-db:/opt/service/data/shared-pyulog-db
+      - ./config_user.ini:/opt/service/config_user.ini:ro
     ports:
       - 5006:5006
     environment:
-      USE_PROXY: "True"
-      # PORT: "5006"
-      # DOMAIN: "test.ru"
-    # volumes:
-    #   - ./data:/opt/service/data
-    #   - ./config_user.ini:/opt/service/config_user.ini:ro
+      - USE_PROXY
+      - DOMAIN
+
+volumes:
+  flight-review-data:
+  shared-pyulog-db:
+    external: true

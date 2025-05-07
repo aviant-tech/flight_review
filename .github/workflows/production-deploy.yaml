@@ -1,0 +1,63 @@
+name: Production deploy
+on:
+  workflow_dispatch:
+
+jobs:
+  tag-production-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.ref }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-north-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          mask-password: "true"
+
+      - name: Build and push image to Amazon ecr
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+        run: |
+          docker pull $ECR_REGISTRY/$ECR_REPOSITORY:release
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:release $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+  deploy-to-ec2:
+    needs: tag-production-image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SSH key
+        run: |
+          mkdir -p ~/.ssh/
+          echo "${{ secrets.AWS_PROD_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+      - name: Add known_hosts
+        run: ssh-keyscan -H ${{ secrets.AWS_PROD_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Move docker compose files to ec2
+        run: |
+          scp docker-compose.yml ${{ secrets.AWS_PROD_SSH_USER }}@${{ secrets.AWS_PROD_HOST }}:/home/admin/flight-review/
+          scp docker-compose.prod.yml ${{ secrets.AWS_PROD_SSH_USER }}@${{ secrets.AWS_PROD_HOST }}:/home/admin/flight-review/
+
+      - name: Deploy on EC2
+        run: |
+          ssh ${{ secrets.AWS_PROD_SSH_USER }}@${{ secrets.AWS_PROD_HOST }} <<'ENDSSH'
+          cd /home/admin/flight-review/
+          aws ecr get-login-password --region eu-north-1 | docker login --username AWS --password-stdin 376527296926.dkr.ecr.eu-north-1.amazonaws.com
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+          docker image prune -f
+          ENDSSH

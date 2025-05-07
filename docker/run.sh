@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -x
+
 PORT_VALUE=${PORT:-5006}
 DOMAIN_VALUE=${DOMAIN:-*}
 
@@ -7,8 +9,8 @@ WORK_PATH=/opt/service
 DATA_PATH=${WORK_PATH}/data
 
 # app setup
-if [ -z "$(ls -A ${DATA_PATH})" ]; then
-	python3 ${WORK_PATH}/setup_db.py
+if [ -z "$(ls -A ${DATA_PATH})" ] || [ "$(ls -A ${DATA_PATH})" = "shared-pyulog-db" ]; then
+    python3 ${WORK_PATH}/setup_db.py
 fi
 
 if [ -n "${USE_PROXY}" ]; then

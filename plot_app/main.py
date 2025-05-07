@@ -23,6 +23,10 @@ from colors import HTML_color_to_RGB # pylint: disable=import-error
 from db_entry import DBData # pylint: disable=import-error
 from configured_plots import generate_plots # pylint: disable=import-error
 from pid_analysis_plots import get_pid_analysis_plots # pylint: disable=import-error
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger("default")
 
 GET_arguments = curdoc().session_context.request.arguments
 if GET_arguments is None or 'log' not in GET_arguments:
@@ -54,11 +58,12 @@ if not validate_log_id(log_id):
         status_code=401,
         reason=f'Invalid log id: {log_id}'
     )
-print(f'Loading log with {log_id=}')
+logger.info(f'Loading log with {log_id=}')
 ulog = load_ulog(log_id)
 
-print('Retrieving PX4 specific data.')
+logger.info('Retrieving PX4 specific data.')
 px4_ulog = PX4ULog(ulog)
+logger.info('Retrieved PX4 specific data.')
 
 print_timing("Data Loading", start_time)
 start_time = timer()

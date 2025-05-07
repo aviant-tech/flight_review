@@ -3,13 +3,11 @@ Tornado handler for the upload page
 """
 
 from __future__ import print_function
-import datetime
 import os
 from html import escape
 import sys
 import uuid
 import binascii
-import sqlite3
 import tornado.web
 import json
 from tornado.ioloop import IOLoop
@@ -24,7 +22,7 @@ from db_entry import DBVehicleData, DBData
 from config import get_ulogdb_filename, get_http_protocol, get_domain_name, \
     email_notifications_config
 from helper import get_total_flight_time, validate_url, get_log_filename, \
-    load_ulog, get_airframe_name, ULogException
+    get_airframe_name, ULogException
 from overview_generator import generate_overview_img_from_id
 
 #pylint: disable=relative-beyond-top-level
@@ -32,6 +30,9 @@ from .common import get_jinja_env, CustomHTTPError, generate_db_data_from_log_fi
     TornadoRequestHandlerBase
 from .send_email import send_notification_email, send_flightreport_email
 from .multipart_streamer import MultiPartStreamer
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger("default")
 
 
 UPLOAD_TEMPLATE = 'upload.html'
@@ -59,10 +60,10 @@ def update_vehicle_db_entry(cur, ulog, log_id, vehicle_name):
             db_tuple = cur.fetchone()
             if db_tuple is not None:
                 vehicle_data.name = db_tuple[0]
-            print('reading vehicle name from db:'+vehicle_data.name)
+            logger.info('reading vehicle name from db:'+vehicle_data.name)
         else:
             vehicle_data.name = vehicle_name
-            print('vehicle name from uploader:'+vehicle_data.name)
+            logger.info('vehicle name from uploader:'+vehicle_data.name)
 
         vehicle_data.log_id = log_id
         flight_time = get_total_flight_time(ulog)
@@ -114,6 +115,7 @@ class UploadHandler(TornadoRequestHandlerBase):
 
     def post(self, *args, **kwargs):
         """ POST request callback """
+        logger.info("UploadHandler POST")
         if self.multipart_streamer:
             try:
                 self.multipart_streamer.data_complete()
@@ -192,7 +194,7 @@ class UploadHandler(TornadoRequestHandlerBase):
                             'target="_blank">logs.uaventure.com</a>.')
                     raise CustomHTTPError(400, 'Invalid File')
 
-                print('Moving uploaded file to', new_file_name)
+                logger.info(f'Moving uploaded file to {str(new_file_name)}')
                 file_obj.move(new_file_name)
 
                 if obfuscated == 1:
@@ -203,25 +205,25 @@ class UploadHandler(TornadoRequestHandlerBase):
                 token = str(binascii.hexlify(os.urandom(16)), 'ascii')
 
                 filename = get_log_filename(log_id)
-                print(f'Loading log with {filename=}')
+                logger.info(f'Loading log with {filename=}')
                 ulog = ULog(filename)
 
                 ulogdb_handle = DatabaseULog.get_db_handle(get_ulogdb_filename())
                 digest = DatabaseULog.calc_sha256sum(filename)
                 dbulog_pk = DatabaseULog.primary_key_from_sha256sum(ulogdb_handle, digest)
                 if dbulog_pk is None:
-                    print('Saving DatabaseULog to database.')
+                    logger.info('Saving DatabaseULog to database.')
                     dbulog = DatabaseULog(ulogdb_handle, log_file=filename)
                     dbulog.save()
                     dbulog_pk = dbulog.primary_key
                 else:
-                    print(f'Found DatabaseULog with hash {digest} in database.')
-                    print(f'Loading DatabaseULog with primary key {dbulog_pk} from database.')
+                    logger.info(f'Found DatabaseULog with hash {digest} in database.')
+                    logger.info(f'Loading DatabaseULog with primary key {dbulog_pk} from database.')
                     dbulog = DatabaseULog(ulogdb_handle, primary_key=dbulog_pk)
 
                 url = '/plot_app?log='+digest
                 full_plot_url = get_http_protocol()+'://'+get_domain_name()+url
-                print(full_plot_url)
+                logger.info(full_plot_url)
 
                 delete_url = get_http_protocol()+'://'+get_domain_name()+ \
                     '/edit_entry?action=delete&log='+log_id+'&token='+token
@@ -320,11 +322,9 @@ class UploadHandler(TornadoRequestHandlerBase):
                 raise CustomHTTPError(
                     400,
                     'Failed to parse the file. It is most likely corrupt.')
-            except:
-                print('Error when handling POST data', sys.exc_info()[0],
-                      sys.exc_info()[1])
+            except Exception as e:
+                logger.info(f'Error when handling POST data: {sys.exc_info()[0]} - {sys.exc_info()[1]}, {e}')
                 raise CustomHTTPError(500)
 
             finally:
                 self.multipart_streamer.release_parts()
-
