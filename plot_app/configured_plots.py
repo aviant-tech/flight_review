@@ -689,51 +689,119 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
         if data_plot.finalize() is not None: plots.append(data_plot)
 
+    has_dynamic_mixer = ulog.initial_parameters.get('SYS_CTRL_ALLOC', 0) == 1
+
+    # Plot actuator_motors/servos and vehicle_torque/thrust_setpoints with CA, 
+    # but plot actuator_controls without CA
+    if has_dynamic_mixer:
+        # Dynamic mixer MR setpoints
+        data_plot = DataPlot(ulog, plot_config, 'vehicle_thrust_setpoint',
+                             y_start=0, title=f'Motor dynamics setpoints', plot_height='small',
+                             changed_params=changed_params, topic_instance=0,
+                             x_range=x_range)
+        if data_plot.dataset:
+            data_plot.add_graph(['xyz[0]', 'xyz[1]', 'xyz[2]'],
+                                colors8[:3],
+                                ['X thrust', 'Y thrust', 'Z thrust'])
+            data_plot.change_dataset('vehicle_torque_setpoint', topic_instance=0)
+            data_plot.add_graph(['xyz[0]', 'xyz[1]', 'xyz[2]'],
+                                colors8[3:6],
+                                ['X torque', 'Y torque', 'Z torque'])
+            plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
+
+        if data_plot.finalize() is not None: plots.append(data_plot)
+
+        # Dynamic mixer FW setpoints
+        data_plot = DataPlot(ulog, plot_config, 'vehicle_thrust_setpoint',
+                             y_start=0, title=f'Control surface dynamics setpoints', plot_height='small',
+                             changed_params=changed_params, topic_instance=1,
+                             x_range=x_range)
+        if data_plot.dataset:
+            data_plot.add_graph(['xyz[0]', 'xyz[1]', 'xyz[2]'],
+                                colors8[:3],
+                                ['X thrust', 'Y thrust', 'Z thrust'])
+            data_plot.change_dataset('vehicle_torque_setpoint', topic_instance=1)
+            data_plot.add_graph(['xyz[0]', 'xyz[1]', 'xyz[2]'],
+                                colors8[3:6],
+                                ['X torque', 'Y torque', 'Z torque'])
+            plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
+
+        if data_plot.finalize() is not None: plots.append(data_plot)
+
+        # Dynamic mixer motor controls
+        data_plot = DataPlot(ulog, plot_config, 'actuator_motors',
+                             y_start=0, title=f'Actuator Motors', plot_height='small',
+                             changed_params=changed_params,
+                             x_range=x_range)
+        max_num_motors = 9  # Topic can have 12, but we only use up to 9, as of 250519
+        for i in range(max_num_motors):
+            field_name = f'control[{i}]'
+            if field_name in data_plot.dataset.data:
+                data_plot.add_graph([field_name],
+                                    [colors8[i % 8]],
+                                    [f'Motor {i+1}'])
+        plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
+        if data_plot.finalize() is not None: plots.append(data_plot)
+
+        # Dynamic mixer servo control
+        data_plot = DataPlot(ulog, plot_config, 'actuator_servos',
+                             y_start=0, title=f'Actuator Servos', plot_height='small',
+                             changed_params=changed_params,
+                             x_range=x_range)
+        max_num_servos = 3  # Topic can have 8, but we only use 3, as of 250519
+        for i in range(max_num_servos):
+            field_name = f'control[{i}]'
+            if field_name in data_plot.dataset.data:
+                data_plot.add_graph([field_name],
+                                    [colors8[i % 8]],
+                                    [f'Servo {i+1}'])
+        plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
+        if data_plot.finalize() is not None: plots.append(data_plot)
+
+    else:  # static mixer
+        # actuator controls 0
+        data_plot = DataPlot(ulog, plot_config, 'actuator_controls_0',
+                             y_start=0, title='Actuator Controls 0', plot_height='small',
+                             changed_params=changed_params, x_range=x_range)
+        data_plot.add_graph(['control[0]', 'control[1]', 'control[2]', 'control[3]'],
+                            colors8[0:4], ['Roll', 'Pitch', 'Yaw', 'Thrust'], mark_nan=True)
+        plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
+        if data_plot.finalize() is not None: plots.append(data_plot)
+
+        # actuator controls (Main) FFT (for filter & output noise analysis)
+        data_plot = DataPlotFFT(ulog, plot_config, 'actuator_controls_0',
+                                title='Actuator Controls FFT', y_range = Range1d(0, 0.01))
+        data_plot.add_graph(['control[0]', 'control[1]', 'control[2]'],
+                            colors3, ['Roll', 'Pitch', 'Yaw'])
+        if not data_plot.had_error:
+            if 'MC_DTERM_CUTOFF' in ulog.initial_parameters: # COMPATIBILITY
+                data_plot.mark_frequency(
+                    ulog.initial_parameters['MC_DTERM_CUTOFF'],
+                    'MC_DTERM_CUTOFF')
+            if 'IMU_DGYRO_CUTOFF' in ulog.initial_parameters:
+                data_plot.mark_frequency(
+                    ulog.initial_parameters['IMU_DGYRO_CUTOFF'],
+                    'IMU_DGYRO_CUTOFF')
+            if 'IMU_GYRO_CUTOFF' in ulog.initial_parameters:
+                data_plot.mark_frequency(
+                    ulog.initial_parameters['IMU_GYRO_CUTOFF'],
+                    'IMU_GYRO_CUTOFF', 20)
+
+        if data_plot.finalize() is not None: plots.append(data_plot)
 
 
-    # actuator controls 0
-    data_plot = DataPlot(ulog, plot_config, 'actuator_controls_0',
-                         y_start=0, title='Actuator Controls 0', plot_height='small',
-                         changed_params=changed_params, x_range=x_range)
-    data_plot.add_graph(['control[0]', 'control[1]', 'control[2]', 'control[3]'],
-                        colors8[0:4], ['Roll', 'Pitch', 'Yaw', 'Thrust'], mark_nan=True)
-    plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
-    if data_plot.finalize() is not None: plots.append(data_plot)
+        # actuator controls 1
+        # (only present on VTOL, Fixed-wing config)
+        data_plot = DataPlot(ulog, plot_config, 'actuator_controls_1',
+                             y_start=0, title='Actuator Controls 1 (VTOL in Fixed-Wing mode)',
+                             plot_height='small', changed_params=changed_params,
+                             x_range=x_range)
+        data_plot.add_graph(['control[0]', 'control[1]', 'control[2]', 'control[3]'],
+                            colors8[0:4], ['Roll', 'Pitch', 'Yaw', 'Thrust'], mark_nan=True)
+        plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
+        if data_plot.finalize() is not None: plots.append(data_plot)
 
-    # actuator controls (Main) FFT (for filter & output noise analysis)
-    data_plot = DataPlotFFT(ulog, plot_config, 'actuator_controls_0',
-                            title='Actuator Controls FFT', y_range = Range1d(0, 0.01))
-    data_plot.add_graph(['control[0]', 'control[1]', 'control[2]'],
-                        colors3, ['Roll', 'Pitch', 'Yaw'])
-    if not data_plot.had_error:
-        if 'MC_DTERM_CUTOFF' in ulog.initial_parameters: # COMPATIBILITY
-            data_plot.mark_frequency(
-                ulog.initial_parameters['MC_DTERM_CUTOFF'],
-                'MC_DTERM_CUTOFF')
-        if 'IMU_DGYRO_CUTOFF' in ulog.initial_parameters:
-            data_plot.mark_frequency(
-                ulog.initial_parameters['IMU_DGYRO_CUTOFF'],
-                'IMU_DGYRO_CUTOFF')
-        if 'IMU_GYRO_CUTOFF' in ulog.initial_parameters:
-            data_plot.mark_frequency(
-                ulog.initial_parameters['IMU_GYRO_CUTOFF'],
-                'IMU_GYRO_CUTOFF', 20)
-
-    if data_plot.finalize() is not None: plots.append(data_plot)
-
-
-    # actuator controls 1
-    # (only present on VTOL, Fixed-wing config)
-    data_plot = DataPlot(ulog, plot_config, 'actuator_controls_1',
-                         y_start=0, title='Actuator Controls 1 (VTOL in Fixed-Wing mode)',
-                         plot_height='small', changed_params=changed_params,
-                         x_range=x_range)
-    data_plot.add_graph(['control[0]', 'control[1]', 'control[2]', 'control[3]'],
-                        colors8[0:4], ['Roll', 'Pitch', 'Yaw', 'Thrust'], mark_nan=True)
-    plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
-    if data_plot.finalize() is not None: plots.append(data_plot)
-
-    # actuator outputs 0: Main
+    # actuator outputs
     for ao_idx in (0, 1, 2, 3, 4):
         data_plot = DataPlot(ulog, plot_config, 'actuator_outputs',
                              y_start=0, title=f'Actuator Outputs ({ao_idx})', plot_height='small',
