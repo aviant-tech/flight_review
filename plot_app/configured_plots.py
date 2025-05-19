@@ -734,7 +734,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     if data_plot.finalize() is not None: plots.append(data_plot)
 
     # actuator outputs 0: Main
-    for ao_idx in (0, 1, 2):
+    for ao_idx in (0, 1, 2, 3, 4):
         data_plot = DataPlot(ulog, plot_config, 'actuator_outputs',
                              y_start=0, title=f'Actuator Outputs ({ao_idx})', plot_height='small',
                              changed_params=changed_params, topic_instance=ao_idx,
