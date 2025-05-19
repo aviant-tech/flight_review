@@ -1,6 +1,16 @@
 # CHANGELOG
 
 
+## v0.4.0 (2025-05-19)
+
+### Features
+
+- Plot CA topics instead of actuator_controls
+  ([`4131ea7`](https://github.com/aviant-tech/flight_review/commit/4131ea7c3f99c17b7cd9295430158565c8c595b5))
+
+Still plot actuator_controls without CA
+
+
 ## v0.3.0 (2025-05-19)
 
 ### Features
