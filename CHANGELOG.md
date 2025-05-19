@@ -1,6 +1,16 @@
 # CHANGELOG
 
 
+## v0.3.0 (2025-05-19)
+
+### Features
+
+- Plot all actuator_outputs instance
+  ([`9804997`](https://github.com/aviant-tech/flight_review/commit/98049976d6632e5358c06744f1c6a85d08462d3d))
+
+Was missing AUX PWM and AUX DSHOT
+
+
 ## v0.2.1 (2025-05-07)
 
 ### Build System
