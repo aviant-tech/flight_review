@@ -802,9 +802,18 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         if data_plot.finalize() is not None: plots.append(data_plot)
 
     # actuator outputs
+    actuator_output_protocols = {
+        0: "UAVCAN 1",
+        1: "UAVCAN 2",
+        2: "MAIN PWM",
+        3: "AUX PWM",
+        4: "AUX DSHOT"
+    }
+
     for ao_idx in (0, 1, 2, 3, 4):
+        protocol_name = actuator_output_protocols.get(ao_idx, f"Unknown ({ao_idx})")
         data_plot = DataPlot(ulog, plot_config, 'actuator_outputs',
-                             y_start=0, title=f'Actuator Outputs ({ao_idx})', plot_height='small',
+                             y_start=0, title=f'Actuator Outputs {ao_idx} ({protocol_name})', plot_height='small',
                              changed_params=changed_params, topic_instance=ao_idx,
                              x_range=x_range)
         num_actuator_outputs = 16
