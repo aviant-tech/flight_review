@@ -802,22 +802,75 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         if data_plot.finalize() is not None: plots.append(data_plot)
 
     # actuator outputs
-    for ao_idx in (0, 1, 2, 3, 4):
-        data_plot = DataPlot(ulog, plot_config, 'actuator_outputs',
-                             y_start=0, title=f'Actuator Outputs ({ao_idx})', plot_height='small',
+    actuator_output_protocols = [
+        (0, "UAVCAN 1", lambda val: np.where(val>8192, 0, val/8192), "UAVCAN_EC"),
+        (1, "UAVCAN 2", lambda val: np.where(val>8192, 0, val/8192), "UAVCAN_EC"),
+        (2, "MAIN PWM", lambda val: (val-1000)/1000, "PWM_MAIN"),
+        (3, "AUX PWM", lambda val: (val-1000)/1000, "PWM_AUX"),
+        (4, "AUX DSHOT", lambda val: (val-48)/1999, "PWM_AUX"),
+    ]
+
+    data_plot_effv = DataPlot(ulog, plot_config, 'battery_status',
+                             y_start=0, title=f'Actuator Outputs Effective Voltage', plot_height='small',
+                             changed_params=changed_params, topic_instance=0,
+                             x_range=x_range)
+    battery_voltages = data_plot_effv.dataset.data['voltage_v']
+    battery_timestamps = data_plot_effv.dataset.data['timestamp']
+
+    for ao_idx, port_name, throttle_func, param_key in actuator_output_protocols:
+        data_plot_output = DataPlot(ulog, plot_config, 'actuator_outputs',
+                             y_start=0, title=f'Actuator Outputs {ao_idx} ({port_name})', plot_height='small',
                              changed_params=changed_params, topic_instance=ao_idx,
                              x_range=x_range)
         num_actuator_outputs = 16
-        if data_plot.dataset:
-            max_outputs = np.amax(data_plot.dataset.data['noutputs'])
+        if data_plot_output.dataset:
+            # Output plot, one per output type
+            max_outputs = np.amax(data_plot_output.dataset.data['noutputs'])
             if max_outputs < num_actuator_outputs:
                 num_actuator_outputs = max_outputs
-        data_plot.add_graph(['output['+str(i)+']' for i in range(num_actuator_outputs)],
-                            [colors8[i % 8] for i in range(num_actuator_outputs)],
-                            ['Output '+str(i) for i in range(num_actuator_outputs)], mark_nan=True)
-        plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
 
-        if data_plot.finalize() is not None: plots.append(data_plot)
+            data_plot_output.add_graph(['output['+str(i)+']' for i in range(num_actuator_outputs)],
+                                [colors8[i % 8] for i in range(num_actuator_outputs)],
+                                ['Output '+str(i) for i in range(num_actuator_outputs)], mark_nan=True)
+            plot_flight_modes_background(data_plot_output, flight_mode_changes, vtol_states)
+
+            # Effective voltage plot, one common for all motor outputs
+            # TODO: Can use actuator_motors instead with manual THR_MDL_FAC
+            # compensation, so that we benefit from the high-rate
+            # actuator_motors topic
+            data_plot_effv.change_dataset('actuator_outputs', topic_instance=ao_idx)
+            output_timestamps = data_plot_output.dataset.data['timestamp']
+            effv_func = lambda val: np.interp(output_timestamps, battery_timestamps, battery_voltages) * throttle_func(val)
+            for i in range(num_actuator_outputs):
+                MOTOR_FUNC_MIN = 100
+                MAX_MOTOR_OUTPUTS = 12
+                func_param_name = f'{param_key}_FUNC{i+1}'
+                output_function = ulog.initial_parameters.get(func_param_name, None)
+                if output_function is None or output_function <= MOTOR_FUNC_MIN or output_function >= MOTOR_FUNC_MIN + MAX_MOTOR_OUTPUTS:
+                    # Not a motor output
+                    print(f'{func_param_name}={output_function} is not a motor output')
+                    continue
+                # AUX ports report both DSHOT and PWM output when DSHOT is enabled, so we must
+                # manually check the configured protocol and only show that one
+                if port_name.startswith("AUX"):
+                    TIM_IDX = 0 if i in (0, 1, 2, 3) else 1  # AUX1-4 or AUX5-6
+                    configured_proto = ulog.initial_parameters.get(f'{param_key}_TIM{TIM_IDX}', None)
+                    if configured_proto is None:
+                        print(f'{param_key}_TIM{TIM_IDX} is not set')
+                        continue
+                    configured_proto_name = "PWM" if configured_proto > 0 else "DSHOT"
+                    if not port_name.endswith(configured_proto_name):
+                        print(f'{param_key}_TIM{TIM_IDX} is set to {configured_proto}, but {port_name} is not a {configured_proto_name} output')
+                        continue
+
+                motor_idx = output_function - MOTOR_FUNC_MIN
+                data_plot_effv.add_graph(
+                    [lambda data: (f'output[{i}]', effv_func(data[f'output[{i}]']))],
+                    [colors8[i % 8]],
+                    [f'Motor {motor_idx} ({port_name})'])
+
+            if data_plot_output.finalize() is not None: plots.append(data_plot_output)
+    if data_plot_effv.finalize() is not None: plots.append(data_plot_effv)
 
     # raw acceleration
     data_plot = DataPlot(ulog, plot_config, 'sensor_combined',
