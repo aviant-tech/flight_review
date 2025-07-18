@@ -711,6 +711,22 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
         if data_plot.finalize() is not None: plots.append(data_plot)
 
+        # Dynamic mixer unallocated thrust/torque
+        data_plot = DataPlot(ulog, plot_config, 'control_allocator_status',
+                             y_start=0, title=f'Unallocated motor dynamics', plot_height='small',
+                             changed_params=changed_params, topic_instance=0,
+                             x_range=x_range)
+        if data_plot.dataset:
+            data_plot.add_graph(['unallocated_thrust[0]', 'unallocated_thrust[1]', 'unallocated_thrust[2]'],
+                                colors8[:3],
+                                ['X thrust', 'Y thrust', 'Z thrust'])
+            data_plot.add_graph(['unallocated_torque[0]', 'unallocated_torque[1]', 'unallocated_torque[2]'],
+                                colors8[3:6],
+                                ['X torque', 'Y torque', 'Z torque'])
+            plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
+
+        if data_plot.finalize() is not None: plots.append(data_plot)
+
         # Dynamic mixer FW setpoints
         data_plot = DataPlot(ulog, plot_config, 'vehicle_thrust_setpoint',
                              y_start=0, title=f'Control surface dynamics setpoints', plot_height='small',
