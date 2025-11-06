@@ -626,17 +626,18 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         tas_state_criticalness = TAS_min * 0.9 - ulog.get_dataset("tecs_status").data["true_airspeed_filtered"]
         throttle_state_criticalness = ulog.get_dataset("tecs_status").data["throttle_sp"] - ulog.initial_parameters["FW_THR_MAX"] * 0.95
         # From TECS:_detect_uncommanded_descent()
-        ste_error_criticalness = ulog.get_dataset("tecs_status").data["total_energy_error"] - 200
+        # TODO: re-enable with proper 1.15 energy error calculation
+        #ste_error_criticalness = ulog.get_dataset("tecs_status").data["total_energy_error"] - 200
         data_plot.add_graph([
                 lambda data: ('Total energy rate', data['total_energy_rate']),
-                lambda data: ('Total energy criticalness', ste_error_criticalness),
+                #lambda data: ('Total energy criticalness', ste_error_criticalness),
                 lambda data: ('Airspeed criticalness', tas_state_criticalness),
                 lambda data: ('Throttle criticalness scaled', throttle_state_criticalness * 10)
             ],
             colors8[:4],
             [
                 'Total energy rate',
-                'Total energy criticalness',
+                #'Total energy criticalness',
                 'Airspeed criticalness',
                 'Throttle criticalness scaled'
                 ],
