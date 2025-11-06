@@ -1,6 +1,7 @@
 """ This contains the list of all drawn plots on the log plotting page """
 
 from html import escape
+from packaging.version import parse as parse_version
 
 from bokeh.layouts import column
 from bokeh.models import Range1d
@@ -625,17 +626,18 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         tas_state_criticalness = TAS_min * 0.9 - ulog.get_dataset("tecs_status").data["true_airspeed_filtered"]
         throttle_state_criticalness = ulog.get_dataset("tecs_status").data["throttle_sp"] - ulog.initial_parameters["FW_THR_MAX"] * 0.95
         # From TECS:_detect_uncommanded_descent()
-        ste_error_criticalness = ulog.get_dataset("tecs_status").data["total_energy_error"] - 200
+        # TODO: re-enable with proper 1.15 energy error calculation
+        #ste_error_criticalness = ulog.get_dataset("tecs_status").data["total_energy_error"] - 200
         data_plot.add_graph([
                 lambda data: ('Total energy rate', data['total_energy_rate']),
-                lambda data: ('Total energy criticalness', ste_error_criticalness),
+                #lambda data: ('Total energy criticalness', ste_error_criticalness),
                 lambda data: ('Airspeed criticalness', tas_state_criticalness),
                 lambda data: ('Throttle criticalness scaled', throttle_state_criticalness * 10)
             ],
             colors8[:4],
             [
                 'Total energy rate',
-                'Total energy criticalness',
+                #'Total energy criticalness',
                 'Airspeed criticalness',
                 'Throttle criticalness scaled'
                 ],
@@ -690,6 +692,9 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         if data_plot.finalize() is not None: plots.append(data_plot)
 
     has_dynamic_mixer = ulog.initial_parameters.get('SYS_CTRL_ALLOC', 0) == 1
+    # 1.14 and later use dynamic mixer, but don't have the param
+    if parse_version(ulog.get_version_info_str().split()[0]) >= parse_version("v1.14.0"):
+        has_dynamic_mixer = True
 
     # Plot actuator_motors/servos and vehicle_torque/thrust_setpoints with CA, 
     # but plot actuator_controls without CA
@@ -825,6 +830,12 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         (3, "AUX PWM", lambda val: (val-1000)/1000, "PWM_AUX"),
         (4, "AUX DSHOT", lambda val: (val-48)/1999, "PWM_AUX"),
     ]
+
+    if parse_version(ulog.get_version_info_str().split()[0]) >= parse_version("v1.15.0"):
+        actuator_output_protocols = [
+            (0, "MAIN PWM", lambda val: (val-1000)/1000, "PWM_MAIN"),
+            (1, "AUX PWM", lambda val: (val-1000)/1000, "PWM_AUX"),
+        ]
 
     data_plot_effv = DataPlot(ulog, plot_config, 'battery_status',
                              y_start=0, title=f'Actuator Outputs Effective Voltage', plot_height='small',
@@ -1047,11 +1058,11 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
                          y_start=0, title='Thrust and Magnetic Field', plot_height='small',
                          changed_params=changed_params, x_range=x_range, topic_instance=1)
 
-    data_plot.change_dataset('actuator_controls_0')
+    data_plot.change_dataset('actuator_controls', 0)
     data_plot.add_graph([lambda data: ('thrust', data['control[3]'])],
                         colors8[0:1], ['Thrust'])
     if is_vtol:
-        data_plot.change_dataset('actuator_controls_1')
+        data_plot.change_dataset('actuator_controls', 1)
         data_plot.add_graph([lambda data: ('thrust', data['control[3]'])],
                             colors8[1:2], ['Thrust (Fixed-wing)'])
 
@@ -1067,12 +1078,14 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
     # thrust and magentic field scatter plot
     min_thrust = 0.5
-    data_plot = DataPlot(ulog, plot_config, 'actuator_controls_0',
+
+    actuator_thrust_topic = "vehicle_thrust_setpoint" if has_dynamic_mixer else "actuator_controls_0"
+    data_plot = DataPlot(ulog, plot_config, actuator_thrust_topic,
                          title=f'Thrust and magnetic norm scatter plot (polyfit for thrust > {min_thrust})', plot_height='small',
                          x_axis_label='Thrust', y_axis_label='Magnetic field norm')
     data_plot.set_use_time_formatter(False)
     thrust_timestamps = data_plot.dataset.data['timestamp']
-    thrust_values = data_plot.dataset.data['control[3]']
+    thrust_values = data_plot.dataset.data["xyz[0]"] if has_dynamic_mixer else data_plot.dataset.data['control[3]']
 
     max_mag_norm = 0
     for topic_instance in range(2):
