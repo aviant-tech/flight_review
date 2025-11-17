@@ -54,6 +54,16 @@ class ThreeDHandler(TornadoRequestHandlerBase):
         except (KeyError, IndexError, ValueError) as error:
             pass
 
+        try:
+            gps_altitude = gps_pos['alt'] * 1e-3
+            gps_latitude = gps_pos['lat'] * 1e-7
+            gps_longitude = gps_pos['lon'] * 1e-7
+        except KeyError:
+            # These changed in PX4 v1.15
+            gps_altitude = gps_pos['altitude_msl_m']
+            gps_latitude = gps_pos['latitude_deg']
+            gps_longitude = gps_pos['longitude_deg']
+
 
         # Get the takeoff location. We use the first position with a valid fix,
         # and assume that the vehicle is not in the air already at that point
@@ -62,9 +72,9 @@ class ThreeDHandler(TornadoRequestHandlerBase):
         if len(gps_indices[0]) > 0:
             takeoff_index = gps_indices[0][0]
         takeoff_altitude = '{:.3f}' \
-            .format(gps_pos['alt'][takeoff_index] * 1.e-3)
-        takeoff_latitude = '{:.10f}'.format(gps_pos['lat'][takeoff_index] * 1.e-7)
-        takeoff_longitude = '{:.10f}'.format(gps_pos['lon'][takeoff_index] * 1.e-7)
+            .format(gps_altitude[takeoff_index])
+        takeoff_latitude = '{:.10f}'.format(gps_latitude[takeoff_index])
+        takeoff_longitude = '{:.10f}'.format(gps_longitude[takeoff_index])
 
 
         # calculate UTC time offset (assume there's no drift over the entire log)
@@ -113,7 +123,7 @@ class ThreeDHandler(TornadoRequestHandlerBase):
         # - altitude requires an offset (to match the GPS data)
         # - it's worse for some logs where the estimation is bad -> acro flights
         #   (-> add both: user-selectable between GPS & estimated trajectory?)
-        alt_offset = gps_pos['alt'][0]*1e-3 - vehicle_global_position['alt'][0]
+        alt_offset = gps_altitude[0] - vehicle_global_position['alt'][0]
         for i in range(len(vehicle_global_position['timestamp'])):
             lon = vehicle_global_position['lon'][i]
             lat = vehicle_global_position['lat'][i]
