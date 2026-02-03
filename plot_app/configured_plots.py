@@ -693,7 +693,8 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
     has_dynamic_mixer = ulog.initial_parameters.get('SYS_CTRL_ALLOC', 0) == 1
     # 1.14 and later use dynamic mixer, but don't have the param
-    if parse_version(ulog.get_version_info_str().split()[0]) >= parse_version("v1.14.0"):
+    version_info_str = ulog.get_version_info_str()
+    if version_info_str is not None and parse_version(version_info_str.split()[0]) >= parse_version("v1.14.0"):
         has_dynamic_mixer = True
 
     # Plot actuator_motors/servos and vehicle_torque/thrust_setpoints with CA, 
@@ -831,7 +832,8 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         (4, "AUX DSHOT", lambda val: (val-48)/1999, "PWM_AUX"),
     ]
 
-    if parse_version(ulog.get_version_info_str().split()[0]) >= parse_version("v1.15.0"):
+    version_info_str = ulog.get_version_info_str()
+    if version_info_str is not None and parse_version(version_info_str.split()[0]) >= parse_version("v1.15.0"):
         actuator_output_protocols = [
             (0, "MAIN PWM", lambda val: (val-1000)/1000, "PWM_MAIN"),
             (1, "AUX PWM", lambda val: (val-1000)/1000, "PWM_AUX"),
