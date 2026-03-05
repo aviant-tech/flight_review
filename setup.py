@@ -1,7 +1,7 @@
 from setuptools import setup
 
 
-__version__ = "1.2.2"
+__version__ = "1.2.3"
 
 setup(
     name="Flight Review",
