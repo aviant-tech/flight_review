@@ -691,11 +691,14 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
         if data_plot.finalize() is not None: plots.append(data_plot)
 
-    has_dynamic_mixer = ulog.initial_parameters.get('SYS_CTRL_ALLOC', 0) == 1
-    # 1.14 and later use dynamic mixer, but don't have the param
-    version_info_str = ulog.get_version_info_str()
-    if version_info_str is not None and parse_version(version_info_str.split()[0]) >= parse_version("v1.14.0"):
-        has_dynamic_mixer = True
+    # NOTE: Not all versions have SYS_CTRL_ALLOC parameter,
+    # and  non-tagged versions don't have version strings.
+    # The most robust way to check for control allocation is to check for the datasets
+    has_dynamic_mixer = False
+    for d in ulog.data_list:
+        if d.name == "vehicle_thrust_setpoint":
+            has_dynamic_mixer = True
+            break
 
     # Plot actuator_motors/servos and vehicle_torque/thrust_setpoints with CA, 
     # but plot actuator_controls without CA
